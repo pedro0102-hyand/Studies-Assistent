@@ -21,6 +21,9 @@ db.sqlite3-journal
 /media
 /staticfiles
 /static
+# Projeto em backend/ (runserver a partir de backend/)
+backend/media/
+backend/staticfiles/
 
 # Ambiente e segredos
 .env
