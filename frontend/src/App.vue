@@ -1,47 +1,69 @@
 <script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
-import TheWelcome from './components/TheWelcome.vue'
+import { onMounted, ref } from 'vue'
+
+/** Base da API Django (dev: runserver na porta 8000) */
+const API_BASE = 'http://127.0.0.1:8000'
+
+const healthStatus = ref<string | null>(null)
+const healthError = ref<string | null>(null)
+const loading = ref(true)
+
+onMounted(async () => {
+  try {
+    const res = await fetch(`${API_BASE}/api/health/`)
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+    const data = (await res.json()) as { status: string }
+    healthStatus.value = data.status
+  } catch (e) {
+    healthError.value = e instanceof Error ? e.message : 'Erro desconhecido'
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-    </div>
-  </header>
-
-  <main>
-    <TheWelcome />
+  <main class="page">
+    <h1>Studies Assistant</h1>
+    <section class="api" aria-live="polite">
+      <p v-if="loading">A contactar o backend…</p>
+      <p v-else-if="healthError" class="err">
+        Não foi possível ligar à API: {{ healthError }}
+      </p>
+      <p v-else>
+        Backend <code>/api/health/</code>:
+        <strong>{{ healthStatus }}</strong>
+      </p>
+    </section>
   </main>
 </template>
 
 <style scoped>
-header {
-  line-height: 1.5;
+.page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: system-ui, sans-serif;
 }
 
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
+h1 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
 }
 
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
+.api {
+  padding: 1rem;
+  border-radius: 8px;
+  background: #f4f4f5;
+}
 
-  .logo {
-    margin: 0 2rem 0 0;
-  }
+.err {
+  color: #b91c1c;
+}
 
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
+code {
+  font-size: 0.9em;
 }
 </style>
