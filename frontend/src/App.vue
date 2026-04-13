@@ -1,165 +1,168 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { API_BASE } from '@/config'
+import { RouterLink, RouterView } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 
-const { user, sessionReady, initSession, login, logout } = useAuth()
+const { user, sessionReady, logout } = useAuth()
 
-const healthStatus = ref<string | null>(null)
-const healthError = ref<string | null>(null)
-const healthLoading = ref(true)
-
-const loginUser = ref('')
-const loginPass = ref('')
-const loginError = ref<string | null>(null)
-const loginPending = ref(false)
-
-onMounted(async () => {
-  try {
-    const res = await fetch(`${API_BASE}/api/health/`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = (await res.json()) as { status: string }
-    healthStatus.value = data.status
-  } catch (e) {
-    healthError.value = e instanceof Error ? e.message : 'Erro desconhecido'
-  } finally {
-    healthLoading.value = false
-  }
-  await initSession()
-})
-
-async function onSubmitLogin() {
-  loginError.value = null
-  loginPending.value = true
-  const r = await login(loginUser.value.trim(), loginPass.value)
-  loginPending.value = false
-  if (!r.ok) {
-    loginError.value = r.error ?? 'Falha no login'
-    return
-  }
-  loginPass.value = ''
+async function onLogout() {
+  await logout()
 }
 </script>
 
 <template>
-  <main class="page">
-    <h1>Studies Assistant</h1>
+  <div class="shell">
+    <header class="header">
+      <div class="header__inner">
+        <RouterLink to="/" class="header__brand">
+          <span class="header__logo" aria-hidden="true" />
+          <span class="header__title">Studies Assistant</span>
+        </RouterLink>
 
-    <section class="card" aria-live="polite">
-      <h2>Backend</h2>
-      <p v-if="healthLoading">A contactar <code>/api/health/</code>…</p>
-      <p v-else-if="healthError" class="err">{{ healthError }}</p>
-      <p v-else>
-        <code>/api/health/</code>: <strong>{{ healthStatus }}</strong>
-      </p>
-    </section>
+        <nav v-if="sessionReady" class="header__nav" aria-label="Principal">
+          <RouterLink class="nav-link" to="/">Início</RouterLink>
+          <template v-if="!user">
+            <RouterLink class="nav-link" to="/login">Entrar</RouterLink>
+            <RouterLink class="nav-link nav-link--cta" to="/register">Criar conta</RouterLink>
+          </template>
+          <template v-else>
+            <RouterLink class="nav-link" to="/app">Área da app</RouterLink>
+            <button type="button" class="nav-link nav-link--logout" @click="onLogout">Sair</button>
+          </template>
+        </nav>
+      </div>
+    </header>
 
-    <section class="card">
-      <h2>Sessão (2.5)</h2>
-      <p v-if="!sessionReady">A restaurar sessão…</p>
-      <template v-else-if="user">
-        <p>
-          Autenticado: <strong>{{ user.username }}</strong> (id {{ user.id }}) —
-          <span class="muted">{{ user.email || 'sem email' }}</span>
-        </p>
-        <p><code>GET /api/auth/me/</code> sincronizado com o token em <code>localStorage</code>.</p>
-        <button type="button" class="btn" @click="logout">Terminar sessão</button>
-      </template>
-      <form v-else @submit.prevent="onSubmitLogin">
-        <p class="muted">Login para testar tokens e <code>/api/auth/me/</code>.</p>
-        <label>
-          Utilizador
-          <input v-model="loginUser" type="text" autocomplete="username" required />
-        </label>
-        <label>
-          Palavra-passe
-          <input v-model="loginPass" type="password" autocomplete="current-password" required />
-        </label>
-        <p v-if="loginError" class="err">{{ loginError }}</p>
-        <button type="submit" class="btn primary" :disabled="loginPending">
-          {{ loginPending ? 'A entrar…' : 'Entrar' }}
-        </button>
-      </form>
-    </section>
-  </main>
+    <div class="shell__main">
+      <RouterView />
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.page {
-  max-width: 40rem;
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--sa-bg);
+}
+
+.shell__main {
+  flex: 1;
+  width: 100%;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid var(--sa-border);
+  background: color-mix(in srgb, var(--sa-surface) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.header__inner {
+  max-width: var(--sa-max);
   margin: 0 auto;
-  padding: 2rem;
-  font-family: system-ui, sans-serif;
-}
-
-h1 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-}
-
-h2 {
-  font-size: 1rem;
-  margin: 0 0 0.75rem;
-}
-
-.card {
-  margin-bottom: 1.25rem;
-  padding: 1rem;
-  border-radius: 8px;
-  background: #f4f4f5;
-}
-
-form {
+  padding: 0.65rem clamp(1rem, 4vw, 1.5rem);
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
 }
 
-label {
+.header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--sa-text);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.header__brand:hover {
+  color: var(--sa-primary);
+}
+
+.header__logo {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--sa-primary), var(--sa-accent));
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35);
+}
+
+.header__title {
+  line-height: 1.2;
+}
+
+.header__nav {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.9rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  max-width: 100%;
 }
 
-input {
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font: inherit;
-}
-
-.err {
-  color: #b91c1c;
-}
-
-.muted {
-  color: #52525b;
-  font-size: 0.9rem;
-}
-
-.btn {
-  align-self: flex-start;
-  padding: 0.45rem 0.9rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #fff;
+.nav-link {
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--sa-radius-full);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--sa-text-muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  background: transparent;
   cursor: pointer;
-  font: inherit;
+  font-family: inherit;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.btn.primary {
-  background: #18181b;
+.nav-link:hover {
+  color: var(--sa-text);
+  background: var(--sa-primary-soft);
+}
+
+.nav-link.router-link-active:not(.nav-link--cta):not(.nav-link--logout) {
+  color: var(--sa-primary);
+  background: var(--sa-primary-soft);
+}
+
+.nav-link--cta {
   color: #fff;
-  border-color: #18181b;
+  background: linear-gradient(135deg, var(--sa-primary), var(--sa-accent));
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.3);
 }
 
-.btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+.nav-link--cta:hover {
+  color: #fff;
+  filter: brightness(1.06);
 }
 
-code {
-  font-size: 0.9em;
+.nav-link--logout {
+  color: var(--sa-danger);
+}
+
+.nav-link--logout:hover {
+  background: var(--sa-danger-bg);
+  color: var(--sa-danger);
+}
+
+@media (max-width: 520px) {
+  .header__inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header__nav {
+    justify-content: flex-start;
+  }
 }
 </style>
