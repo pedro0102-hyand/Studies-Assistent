@@ -3,7 +3,24 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .serializers import DocumentDetailSerializer, DocumentUploadSerializer 
+
+from .models import Document
+from .serializers import DocumentDetailSerializer, DocumentUploadSerializer
+
+# View for listing documents
+class DocumentListView(APIView):
+    """
+    GET — lista PDFs do utilizador autenticado (nunca os de outros).
+    """
+
+    permission_classes = [IsAuthenticated] # Permission classes for the view
+
+    def get(self, request):
+
+        qs = Document.objects.filter(user=request.user) # Get the documents for the user
+        ser = DocumentDetailSerializer(qs, many=True, context={'request': request}) # Serialize the documents
+        return Response(ser.data)
+
 
 # View for uploading a document
 class DocumentUploadView(APIView):
