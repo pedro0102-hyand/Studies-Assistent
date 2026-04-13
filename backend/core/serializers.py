@@ -48,3 +48,10 @@ class RegisterSerializer(serializers.Serializer):
             email=email,
             password=password,
         )
+
+# Serializador para o perfil do usuário
+class UserMeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email')
+        read_only_fields = fields

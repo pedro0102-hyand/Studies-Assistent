@@ -1,12 +1,20 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import (
+    TokenBlacklistView,
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 from . import views
 
 urlpatterns = [
-    # Endpoints para a saúde do backend e autenticação
     path('health/', views.health, name='health'),
-    path('auth/register/', views.register, name='register'), # Endpoint para o registro de novos usuários
-    path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'), # Endpoint para a obtenção de tokens de acesso
-    path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # Endpoint para o refresh de tokens de acesso
+    path('auth/register/', views.register, name='register'),
+    path('auth/me/', views.me, name='me'),
+    # Login: mesmo comportamento que auth/token/ (body: username, password)
+    path('auth/login/', TokenObtainPairView.as_view(), name='login'),
+    path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # Logout: body JSON {"refresh": "<refresh_token>"}
+    path('auth/logout/', TokenBlacklistView.as_view(), name='logout'),
 ]
