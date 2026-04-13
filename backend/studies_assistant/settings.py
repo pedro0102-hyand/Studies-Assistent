@@ -126,6 +126,8 @@ STATIC_URL = 'static/'
 # Ficheiros enviados (PDFs) — Etapa 3
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
+# Uploads até ~25 MB (limite alinhado com documents.serializers.MAX_PDF_BYTES)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 26 * 1024 * 1024
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

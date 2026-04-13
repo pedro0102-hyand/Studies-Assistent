@@ -6,10 +6,9 @@ from django.urls import include, path
 
 # URLs do projeto
 urlpatterns = [
-
-    path('admin/', admin.site.urls), # Administração do Django
-    path('api/', include('core.urls')), # URLs do core
-
+    path('admin/', admin.site.urls),
+    path('api/', include('core.urls')),
+    path('api/', include('documents.urls')),
 ]
 
 # Etapa 3.2 — servir ficheiros enviados em desenvolvimento (não usar isto em produção)
