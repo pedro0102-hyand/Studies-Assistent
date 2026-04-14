@@ -10,11 +10,33 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Raiz do repositório (pasta acima de `backend/`) — para .env e chroma_data
+REPO_ROOT = BASE_DIR.parent
+
+# Etapa 4.1 — variáveis de ambiente (ficheiro `.env` na raiz do projeto)
+load_dotenv(REPO_ROOT / '.env')
+load_dotenv(BASE_DIR / '.env', override=True)
+
+# Ollama — embeddings (nomic-embed-text)
+OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
+OLLAMA_EMBED_MODEL = os.environ.get('OLLAMA_EMBED_MODEL', 'nomic-embed-text:latest')
+
+# ChromaDB — persistência local (ignorada pelo Git)
+_chroma_raw = os.environ.get('CHROMA_PERSIST_DIR', 'chroma_data').strip()
+_chroma_path = Path(_chroma_raw).expanduser()
+CHROMA_PERSIST_PATH = (
+    _chroma_path.resolve()
+    if _chroma_path.is_absolute()
+    else (REPO_ROOT / _chroma_path).resolve()
+)
 
 
 # Quick-start development settings - unsuitable for production
