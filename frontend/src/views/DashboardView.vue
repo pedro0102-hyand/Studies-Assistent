@@ -58,6 +58,9 @@ async function onLogout() {
       </p>
 
       <div class="profile__actions">
+        <RouterLink class="sa-btn sa-btn--secondary dash__docs-link" to="/documents">
+          Gerir PDFs
+        </RouterLink>
         <button type="button" class="sa-btn sa-btn--ghost" @click="onLogout">Terminar sessão</button>
       </div>
     </section>
@@ -182,6 +185,17 @@ async function onLogout() {
   margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--sa-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.dash__docs-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (max-width: 480px) {

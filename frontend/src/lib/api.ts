@@ -46,6 +46,10 @@ export async function refreshAccessToken(): Promise<boolean> {
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const url = joinUrl(path)
   const headers = new Headers(init.headers)
+  // FormData: o browser define multipart + boundary; não forçar Content-Type
+  if (init.body instanceof FormData) {
+    headers.delete('Content-Type')
+  }
   const access = getStoredAccess()
   if (access && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${access}`)
@@ -55,6 +59,9 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     const ok = await refreshAccessToken()
     if (ok) {
       const h2 = new Headers(init.headers)
+      if (init.body instanceof FormData) {
+        h2.delete('Content-Type')
+      }
       h2.set('Authorization', `Bearer ${getStoredAccess()!}`)
       res = await fetch(url, { ...init, headers: h2 })
     }
