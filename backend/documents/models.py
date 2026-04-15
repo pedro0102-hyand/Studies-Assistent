@@ -1,18 +1,18 @@
-from django.conf import settings # Configuração do Django
-from django.db import models # Modelo de dados
-from django.utils.text import get_valid_filename # Função para validar o nome do ficheiro
+from django.conf import settings 
+from django.db import models 
+from django.utils.text import get_valid_filename 
 
 
-# Guarda PDFs por utilizador
+# Guarda PDFs por usuario
 def upload_to_user_pdf(instance: 'Document', filename: str) -> str:
 
-    safe = get_valid_filename(filename)
+    safe = get_valid_filename(filename) 
     return f'pdfs/user_{instance.user_id}/{safe}'
 
 # Modelo de Documento
 class Document(models.Model):
 
-    # Relação com o utilizador
+  
     user = models.ForeignKey(
 
         settings.AUTH_USER_MODEL,
@@ -23,6 +23,9 @@ class Document(models.Model):
 
     original_name = models.CharField(max_length=255) # Nome original do ficheiro
     file = models.FileField(upload_to=upload_to_user_pdf) # Ficheiro PDF
+    # Etapa 4.2 — texto extraído (pode ser grande; em produção considerar ficheiro à parte)
+    extracted_text = models.TextField(blank=True, default='')
+    extraction_error = models.CharField(max_length=500, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True) # Data de criação
     updated_at = models.DateTimeField(auto_now=True) # Data de atualização
 

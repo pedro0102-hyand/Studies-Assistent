@@ -8,14 +8,24 @@ MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB  Maximum size for PDF files
 
 # Serializer for Document detail
 class DocumentDetailSerializer(serializers.ModelSerializer):
-    
-
     file_url = serializers.SerializerMethodField()
+    text_char_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
-        fields = ('id', 'original_name', 'file_url', 'created_at', 'updated_at')
+        fields = (
+            'id',
+            'original_name',
+            'file_url',
+            'text_char_count',
+            'extraction_error',
+            'created_at',
+            'updated_at',
+        )
         read_only_fields = fields
+
+    def get_text_char_count(self, obj: Document) -> int:
+        return len(obj.extracted_text or '')
 
     # Get the URL of the file
     def get_file_url(self, obj: Document) -> str:
