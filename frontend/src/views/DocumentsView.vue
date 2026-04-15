@@ -9,6 +9,8 @@ export interface ApiDocument {
   file_url: string
   text_char_count?: number
   chunk_count?: number
+  embedded_chunk_count?: number
+  embedding_error?: string
   extraction_error?: string
   created_at: string
   updated_at: string
@@ -176,9 +178,21 @@ onMounted(() => {
             >
               {{ doc.extraction_error }}
             </span>
-            <span v-else class="docs__meta">
-              {{ doc.text_char_count ?? 0 }} caracteres · {{ doc.chunk_count ?? 0 }} chunks
-            </span>
+            <template v-else>
+              <span class="docs__meta">
+                {{ doc.text_char_count ?? 0 }} caracteres · {{ doc.chunk_count ?? 0 }} chunks
+                <template v-if="(doc.chunk_count ?? 0) > 0">
+                  · {{ doc.embedded_chunk_count ?? 0 }} embeddings
+                </template>
+              </span>
+              <span
+                v-if="doc.embedding_error"
+                class="docs__meta docs__meta--warn"
+                :title="doc.embedding_error"
+              >
+                Embeddings: {{ doc.embedding_error }}
+              </span>
+            </template>
           </div>
           <div class="docs__item-actions">
             <a
@@ -319,6 +333,10 @@ onMounted(() => {
 
 .docs__meta--err {
   color: var(--sa-danger);
+}
+
+.docs__meta--warn {
+  color: var(--sa-warning, #b45309);
 }
 
 .docs__item-actions {

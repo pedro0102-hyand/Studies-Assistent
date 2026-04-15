@@ -19,6 +19,8 @@ class DocumentDetailSerializer(serializers.ModelSerializer):
             'file_url',
             'text_char_count',
             'chunk_count',
+            'embedded_chunk_count',
+            'embedding_error',
             'extraction_error',
             'created_at',
             'updated_at',

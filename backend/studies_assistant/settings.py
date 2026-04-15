@@ -28,6 +28,8 @@ load_dotenv(BASE_DIR / '.env', override=True)
 # Ollama — embeddings (nomic-embed-text)
 OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
 OLLAMA_EMBED_MODEL = os.environ.get('OLLAMA_EMBED_MODEL', 'nomic-embed-text:latest')
+OLLAMA_EMBED_TIMEOUT = float(os.environ.get('OLLAMA_EMBED_TIMEOUT', '120'))
+OLLAMA_EMBED_BATCH_SIZE = int(os.environ.get('OLLAMA_EMBED_BATCH_SIZE', '32'))
 
 # ChromaDB — persistência local (ignorada pelo Git)
 _chroma_raw = os.environ.get('CHROMA_PERSIST_DIR', 'chroma_data').strip()

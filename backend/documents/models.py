@@ -28,6 +28,9 @@ class Document(models.Model):
     extraction_error = models.CharField(max_length=500, blank=True, default='')
     # Etapa 4.3 — número de chunks gerados a partir de extracted_text
     chunk_count = models.PositiveIntegerField(default=0)
+    # Etapa 4.4 — embeddings Ollama (vetores em memória; Chroma na 4.5)
+    embedded_chunk_count = models.PositiveIntegerField(default=0)
+    embedding_error = models.CharField(max_length=500, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True) # Data de criação
     updated_at = models.DateTimeField(auto_now=True) # Data de atualização
 
