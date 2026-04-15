@@ -7,6 +7,9 @@ export interface ApiDocument {
   id: number
   original_name: string
   file_url: string
+  text_char_count?: number
+  chunk_count?: number
+  extraction_error?: string
   created_at: string
   updated_at: string
 }
@@ -166,6 +169,16 @@ onMounted(() => {
           <div class="docs__item-main">
             <span class="docs__name" :title="doc.original_name">{{ doc.original_name }}</span>
             <span class="docs__date">{{ formatDate(doc.created_at) }}</span>
+            <span
+              v-if="doc.extraction_error"
+              class="docs__meta docs__meta--err"
+              :title="doc.extraction_error"
+            >
+              {{ doc.extraction_error }}
+            </span>
+            <span v-else class="docs__meta">
+              {{ doc.text_char_count ?? 0 }} caracteres · {{ doc.chunk_count ?? 0 }} chunks
+            </span>
           </div>
           <div class="docs__item-actions">
             <a
@@ -296,6 +309,16 @@ onMounted(() => {
 .docs__date {
   font-size: 0.8rem;
   color: var(--sa-text-muted);
+}
+
+.docs__meta {
+  font-size: 0.75rem;
+  color: var(--sa-text-muted);
+  line-height: 1.35;
+}
+
+.docs__meta--err {
+  color: var(--sa-danger);
 }
 
 .docs__item-actions {

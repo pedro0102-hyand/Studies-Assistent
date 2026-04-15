@@ -38,6 +38,10 @@ CHROMA_PERSIST_PATH = (
     else (REPO_ROOT / _chroma_path).resolve()
 )
 
+# Etapa 4.3 — chunking (caracteres)
+RAG_CHUNK_SIZE = int(os.environ.get('RAG_CHUNK_SIZE', '1500'))
+RAG_CHUNK_OVERLAP = int(os.environ.get('RAG_CHUNK_OVERLAP', '200'))
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
