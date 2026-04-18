@@ -1,10 +1,28 @@
 from __future__ import annotations
-from typing import Any # Tipo Any
-import httpx # HTTP Client
+
+import math
+from typing import Any
+
+import httpx
 
 
 class OllamaEmbedError(Exception):
     """Falha ao obter embeddings (rede, HTTP ou resposta inválida)."""
+
+
+def vector_summary(vec: list[float]) -> dict[str, float | int]:
+    """Estatísticas simples de um vetor de embedding (para debug / CLI)."""
+    if not vec:
+        return {'dim': 0, 'min': 0.0, 'max': 0.0, 'mean': 0.0, 'l2': 0.0}
+    n = len(vec)
+    s = sum(vec)
+    return {
+        'dim': n,
+        'min': min(vec),
+        'max': max(vec),
+        'mean': s / n,
+        'l2': math.sqrt(sum(x * x for x in vec)),
+    }
 
 
 # Parsear a resposta do Ollama
