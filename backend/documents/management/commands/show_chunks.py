@@ -101,6 +101,13 @@ class Command(BaseCommand):
             f'(RAG_CHUNK_SIZE={getattr(settings, "RAG_CHUNK_SIZE", 1500)}, '
             f'RAG_CHUNK_OVERLAP={getattr(settings, "RAG_CHUNK_OVERLAP", 200)})'
         )
+        if preview and preview > 0:
+            self.stdout.write(
+                self.style.NOTICE(
+                    f'Prévia abaixo: primeiros {preview} caracteres de cada chunk (não o fim do chunk). '
+                    f'Usa --preview 0 para o texto completo.'
+                )
+            )
         self.stdout.write('')
 
         shown = chunks if limit is None else chunks[: max(0, limit)]
@@ -114,6 +121,10 @@ class Command(BaseCommand):
             self.stdout.write('')
 
         if limit is not None and len(chunks) > len(shown):
+            omit = len(chunks) - len(shown)
             self.stdout.write(
-                self.style.WARNING(f'… omitidos {len(chunks) - len(shown)} chunks (usa --limit sem valor ou maior)')
+                self.style.WARNING(
+                    f'… não mostrados {omit} chunk(s) devido a --limit={limit}. '
+                    f'Para ver todos, corre sem --limit ou com --limit maior.'
+                )
             )
