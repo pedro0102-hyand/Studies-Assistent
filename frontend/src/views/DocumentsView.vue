@@ -11,6 +11,8 @@ export interface ApiDocument {
   chunk_count?: number
   embedded_chunk_count?: number
   embedding_error?: string
+  chroma_indexed_at?: string | null
+  chroma_error?: string
   extraction_error?: string
   created_at: string
   updated_at: string
@@ -183,6 +185,7 @@ onMounted(() => {
                 {{ doc.text_char_count ?? 0 }} caracteres · {{ doc.chunk_count ?? 0 }} chunks
                 <template v-if="(doc.chunk_count ?? 0) > 0">
                   · {{ doc.embedded_chunk_count ?? 0 }} embeddings
+                  <template v-if="doc.chroma_indexed_at"> · Chroma OK</template>
                 </template>
               </span>
               <span
@@ -191,6 +194,13 @@ onMounted(() => {
                 :title="doc.embedding_error"
               >
                 Embeddings: {{ doc.embedding_error }}
+              </span>
+              <span
+                v-if="doc.chroma_error"
+                class="docs__meta docs__meta--warn"
+                :title="doc.chroma_error"
+              >
+                Chroma: {{ doc.chroma_error }}
               </span>
             </template>
           </div>

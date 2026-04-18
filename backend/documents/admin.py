@@ -12,6 +12,8 @@ class DocumentAdmin(admin.ModelAdmin):
         'text_preview',
         'chunk_count',
         'embedded_chunk_count',
+        'chroma_indexed_at',
+        'chroma_error',
         'embedding_error',
         'extraction_error',
         'created_at',
@@ -30,6 +32,8 @@ class DocumentAdmin(admin.ModelAdmin):
         'chunk_count',
         'embedded_chunk_count',
         'embedding_error',
+        'chroma_indexed_at',
+        'chroma_error',
     )
 
     @admin.display(description='Texto (prévia)')

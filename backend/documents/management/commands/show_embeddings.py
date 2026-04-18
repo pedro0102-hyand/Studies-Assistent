@@ -59,9 +59,10 @@ class Command(BaseCommand):
             return
         self.stdout.write(f'Documentos: {total} (até 50, mais recentes primeiro)\n')
         for d in Document.objects.order_by('-id')[:50]:
+            chroma = 'sim' if d.chroma_indexed_at else ('erro' if d.chroma_error else '—')
             self.stdout.write(
                 f'  id={d.pk!s:<5} user_id={d.user_id!s:<4} chars={len(d.extracted_text or "")!s:<7} '
-                f'chunks={d.chunk_count!s:<4} emb={d.embedded_chunk_count!s:<4} {d.original_name!r}'
+                f'chunks={d.chunk_count!s:<4} emb={d.embedded_chunk_count!s:<4} chroma={chroma!s:<5} {d.original_name!r}'
             )
 
     def handle(self, *args, **options) -> None:

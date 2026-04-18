@@ -31,6 +31,9 @@ class Document(models.Model):
     # Etapa 4.4 — embeddings Ollama (vetores em memória; Chroma na 4.5)
     embedded_chunk_count = models.PositiveIntegerField(default=0)
     embedding_error = models.CharField(max_length=500, blank=True, default='')
+    # Etapa 4.5 — ChromaDB
+    chroma_indexed_at = models.DateTimeField(null=True, blank=True)
+    chroma_error = models.CharField(max_length=500, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True) # Data de criação
     updated_at = models.DateTimeField(auto_now=True) # Data de atualização
 

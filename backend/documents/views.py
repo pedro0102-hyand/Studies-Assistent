@@ -4,6 +4,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from .chroma_index import delete_chroma_for_document
 from .extraction import extract_and_save_document
 from .models import Document
 from .serializers import DocumentDetailSerializer, DocumentUploadSerializer
@@ -15,6 +16,7 @@ class DocumentDeleteView(APIView):
 
     def delete(self, request, pk):
         doc = get_object_or_404(Document, pk=pk, user=request.user)
+        delete_chroma_for_document(doc.pk)
         if doc.file:
             doc.file.delete(save=False)
         doc.delete()

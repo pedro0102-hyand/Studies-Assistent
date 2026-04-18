@@ -39,6 +39,7 @@ CHROMA_PERSIST_PATH = (
     if _chroma_path.is_absolute()
     else (REPO_ROOT / _chroma_path).resolve()
 )
+CHROMA_COLLECTION_NAME = os.environ.get('CHROMA_COLLECTION_NAME', 'study_documents')
 
 # Etapa 4.3 — chunking (caracteres)
 RAG_CHUNK_SIZE = int(os.environ.get('RAG_CHUNK_SIZE', '1500'))

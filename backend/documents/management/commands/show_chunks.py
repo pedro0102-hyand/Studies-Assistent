@@ -55,8 +55,10 @@ class Command(BaseCommand):
         qs = Document.objects.order_by('-id')[:50]
         for d in qs:
             chars = len(d.extracted_text or '')
+            chroma = 'sim' if d.chroma_indexed_at else ('erro' if d.chroma_error else '—')
             self.stdout.write(
-                f'  id={d.pk!s:<5} user_id={d.user_id!s:<4} chars={chars!s:<7} chunks={d.chunk_count!s:<4} {d.original_name!r}'
+                f'  id={d.pk!s:<5} user_id={d.user_id!s:<4} chars={chars!s:<7} '
+                f'chunks={d.chunk_count!s:<4} chroma={chroma!s:<5} {d.original_name!r}'
             )
 
     def handle(self, *args, **options) -> None:

@@ -21,6 +21,8 @@ class DocumentDetailSerializer(serializers.ModelSerializer):
             'chunk_count',
             'embedded_chunk_count',
             'embedding_error',
+            'chroma_indexed_at',
+            'chroma_error',
             'extraction_error',
             'created_at',
             'updated_at',
