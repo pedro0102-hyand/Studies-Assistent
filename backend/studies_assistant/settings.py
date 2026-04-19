@@ -54,6 +54,14 @@ RAG_MAX_CONTEXT_CHARS = max(500, int(os.environ.get('RAG_MAX_CONTEXT_CHARS', '12
 RAG_MAX_QUESTION_LENGTH = max(10, int(os.environ.get('RAG_MAX_QUESTION_LENGTH', '4000')))
 RAG_MAX_FILTER_DOCUMENTS = max(1, min(100, int(os.environ.get('RAG_MAX_FILTER_DOCUMENTS', '20'))))
 
+# Etapa 5.5 — mensagem de sistema do RAG (opcional via .env)
+_rag_sys = os.environ.get('RAG_SYSTEM_PROMPT', '').strip()
+RAG_SYSTEM_PROMPT = _rag_sys or (
+    'Responde só com base no contexto fornecido. '
+    'Se não souberes ou a informação não estiver nesse contexto, '
+    'diz claramente que não há informação nos documentos.'
+)
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/

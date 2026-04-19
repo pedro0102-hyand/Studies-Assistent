@@ -7,7 +7,9 @@ from typing import Any
 
 from django.conf import settings
 
+from . import ollama_chat
 from . import ollama_embed
+from .ollama_chat import OllamaChatError
 from .ollama_embed import OllamaEmbedError
 
 _CONTEXT_SEPARATOR = '\n\n---\n\n'
@@ -97,6 +99,53 @@ def build_context_from_chunks(
             break
 
     return (''.join(parts), sources)
+
+
+def generate_rag_answer(
+    context: str,
+    question: str,
+    *,
+    system_prompt: str | None = None,
+) -> str:
+    """
+    Etapa 5.5 — gera a resposta com o modelo de chat do Ollama (``OLLAMA_CHAT_*``).
+
+    System: instruções de fidelidade ao contexto (``RAG_SYSTEM_PROMPT`` ou override).
+    User: bloco com contexto recuperado + pergunta.
+    """
+    q = (question or '').strip()
+    if not q:
+        raise ValueError('A pergunta não pode ser vazia.')
+
+    sys_text = (system_prompt or '').strip() or getattr(
+        settings,
+        'RAG_SYSTEM_PROMPT',
+        'Responde só com base no contexto fornecido.',
+    )
+    ctx = (context or '').strip()
+    user_block = (
+        'Utiliza apenas o seguinte contexto extraído dos documentos do utilizador.\n\n'
+        f'---\n{ctx if ctx else "(Nenhum trecho relevante foi encontrado.)"}\n---\n\n'
+        f'Pergunta: {q}'
+    )
+
+    try:
+        return ollama_chat.ollama_chat_completion(
+            [
+                {'role': 'system', 'content': sys_text},
+                {'role': 'user', 'content': user_block},
+            ],
+            base_url=getattr(settings, 'OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
+            model=getattr(settings, 'OLLAMA_CHAT_MODEL', 'gemma2:2b'),
+            timeout=float(getattr(settings, 'OLLAMA_CHAT_TIMEOUT', 180)),
+        )
+    except OllamaChatError as exc:
+        raise OllamaChatError(
+            'Não foi possível gerar a resposta com o modelo de chat. '
+            f'Confirma que o Ollama está a correr e que o modelo existe '
+            f'(ex.: ollama pull {getattr(settings, "OLLAMA_CHAT_MODEL", "gemma2:2b")}). '
+            f'Detalhe: {exc}'
+        ) from exc
 
 
 def embed_question(text: str) -> list[float]:
