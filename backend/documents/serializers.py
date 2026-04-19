@@ -1,4 +1,5 @@
 import os
+from django.conf import settings
 from django.utils.text import get_valid_filename
 from rest_framework import serializers
 from .models import Document
@@ -86,3 +87,63 @@ class DocumentUploadSerializer(serializers.Serializer):
             file=f,
 
         )
+
+
+# --- Etapa 5.1 — contrato JSON do endpoint RAG (perguntar aos PDFs) ---
+
+
+class RagAskRequestSerializer(serializers.Serializer):
+    """
+    POST /api/rag/ask/ — corpo do pedido.
+
+    - question: texto da pergunta (obrigatório).
+    - document_ids: opcional; se presente, restringe a recuperação a estes IDs de Document
+      do utilizador (validação de posse no serviço RAG).
+    """
+
+    question = serializers.CharField(
+        trim_whitespace=True,
+        min_length=1,
+        max_length=getattr(settings, 'RAG_MAX_QUESTION_LENGTH', 4000),
+    )
+    document_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_null=True,
+        max_length=getattr(settings, 'RAG_MAX_FILTER_DOCUMENTS', 20),
+    )
+
+    def validate_document_ids(self, value):
+        if value is None:
+            return None
+        if len(value) == 0:
+            return None
+        # IDs únicos, ordem estável
+        seen: set[int] = set()
+        out: list[int] = []
+        for x in value:
+            if x not in seen:
+                seen.add(x)
+                out.append(x)
+        return out
+
+
+class RagSourceSerializer(serializers.Serializer):
+    """Uma fonte citada na resposta (chunk recuperado)."""
+
+    document_id = serializers.IntegerField()
+    chunk_index = serializers.IntegerField(min_value=0)
+    original_name = serializers.CharField()
+    excerpt = serializers.CharField()
+
+
+class RagAskResponseSerializer(serializers.Serializer):
+    """
+    Corpo da resposta de sucesso do RAG.
+
+    - answer: texto gerado pelo modelo.
+    - sources: trechos usados como contexto (opcional mas recomendado para transparência).
+    """
+
+    answer = serializers.CharField()
+    sources = RagSourceSerializer(many=True, required=False)

@@ -46,6 +46,14 @@ CHROMA_COLLECTION_NAME = os.environ.get('CHROMA_COLLECTION_NAME', 'study_documen
 RAG_CHUNK_SIZE = int(os.environ.get('RAG_CHUNK_SIZE', '1500'))
 RAG_CHUNK_OVERLAP = int(os.environ.get('RAG_CHUNK_OVERLAP', '200'))
 
+# Etapa 5.1 — RAG: modelo de chat no Ollama e limites
+OLLAMA_CHAT_MODEL = os.environ.get('OLLAMA_CHAT_MODEL', 'gemma2:2b').strip() or 'gemma2:2b'
+OLLAMA_CHAT_TIMEOUT = float(os.environ.get('OLLAMA_CHAT_TIMEOUT', '180'))
+RAG_TOP_K = max(1, min(50, int(os.environ.get('RAG_TOP_K', '5'))))
+RAG_MAX_CONTEXT_CHARS = max(500, int(os.environ.get('RAG_MAX_CONTEXT_CHARS', '12000')))
+RAG_MAX_QUESTION_LENGTH = max(10, int(os.environ.get('RAG_MAX_QUESTION_LENGTH', '4000')))
+RAG_MAX_FILTER_DOCUMENTS = max(1, min(100, int(os.environ.get('RAG_MAX_FILTER_DOCUMENTS', '20'))))
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
