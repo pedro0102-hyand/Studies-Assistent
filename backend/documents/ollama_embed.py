@@ -120,3 +120,33 @@ def embed_texts(
             all_vecs.extend(_parse_embed_response(data, len(batch))) # Adicionar os embeddings à lista
 
     return all_vecs # Devolver a lista de embeddings
+
+
+def embed_query(
+    text: str,
+    *,
+    base_url: str,
+    model: str,
+    timeout: float = 120.0,
+    batch_size: int = 1,
+) -> list[float]:
+    """
+    Embedding de uma única string (pergunta RAG). Reutiliza `embed_texts` com o mesmo modelo
+    dos documentos para os vetores serem comparáveis no Chroma.
+    """
+    stripped = (text or '').strip()
+    if not stripped:
+        raise ValueError('A pergunta não pode ser vazia.')
+
+    vecs = embed_texts(
+        [stripped],
+        base_url=base_url,
+        model=model,
+        timeout=timeout,
+        batch_size=max(1, batch_size),
+    )
+    if not vecs or not vecs[0]:
+        raise OllamaEmbedError(
+            'O Ollama não devolveu um embedding válido para a pergunta.'
+        )
+    return vecs[0]
