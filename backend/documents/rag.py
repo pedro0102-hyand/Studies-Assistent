@@ -168,3 +168,28 @@ def embed_question(text: str) -> list[float]:
             f'(ex.: ollama pull {getattr(settings, "OLLAMA_EMBED_MODEL", "nomic-embed-text")}). '
             f'Detalhe: {exc}'
         ) from exc
+
+
+def run_rag_for_user(
+    *,
+    user_id: int,
+    question: str,
+    document_ids: list[int] | None,
+) -> dict[str, Any]:
+    """
+    Etapa 5.6 — pipeline completo: embedding → Chroma (sempre com filtro user_id) →
+    contexto → resposta LLM. ``document_ids`` já deve estar validado em relação ao utilizador.
+    """
+    from .chroma_index import search_similar_chunks
+
+    top_k = int(getattr(settings, 'RAG_TOP_K', 5))
+    embedding = embed_question(question)
+    chunks = search_similar_chunks(
+        embedding,
+        user_id=user_id,
+        top_k=top_k,
+        document_ids=document_ids,
+    )
+    context, sources = build_context_from_chunks(chunks)
+    answer = generate_rag_answer(context, question)
+    return {'answer': answer, 'sources': sources}

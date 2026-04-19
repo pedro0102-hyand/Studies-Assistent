@@ -7,7 +7,14 @@ from rest_framework.views import APIView
 from .chroma_index import delete_chroma_for_document
 from .extraction import extract_and_save_document
 from .models import Document
-from .serializers import DocumentDetailSerializer, DocumentUploadSerializer
+from .ollama_chat import OllamaChatError
+from .ollama_embed import OllamaEmbedError
+from .rag import run_rag_for_user
+from .serializers import (
+    DocumentDetailSerializer,
+    DocumentUploadSerializer,
+    RagAskRequestSerializer,
+)
 
 # Apagar o documento
 class DocumentDeleteView(APIView):
@@ -54,3 +61,46 @@ class DocumentUploadView(APIView):
         out = DocumentDetailSerializer(document, context={'request': request})
         # Devolver o documento atualizado
         return Response(out.data, status=status.HTTP_201_CREATED)
+
+
+class RagAskView(APIView):
+    """POST /api/rag/ask/ — RAG com JWT; corpo: question, document_ids opcional."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = RagAskRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        question = serializer.validated_data['question']
+        document_ids = serializer.validated_data.get('document_ids')
+
+        if document_ids is not None:
+            found = set(
+                Document.objects.filter(
+                    user=request.user, pk__in=document_ids
+                ).values_list('pk', flat=True)
+            )
+            if set(document_ids) != found:
+                return Response(
+                    {
+                        'detail': 'Um ou mais document_ids são inválidos ou não pertencem ao utilizador.',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            payload = run_rag_for_user(
+                user_id=request.user.pk,
+                question=question,
+                document_ids=document_ids,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except OllamaEmbedError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except OllamaChatError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        return Response(payload, status=status.HTTP_200_OK)

@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -169,6 +170,14 @@ def _build_databases() -> dict:
 
 
 DATABASES = _build_databases()
+# Testes: SQLite em memória (evita criar BD de teste no PostgreSQL sem permissões)
+if 'test' in sys.argv:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': ':memory:',
+        }
+    }
 
 
 # Password validation

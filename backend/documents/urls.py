@@ -17,4 +17,9 @@ urlpatterns = [
         views.DocumentListView.as_view(),
         name='document_list',
     ),
+    path(
+        'rag/ask/',
+        views.RagAskView.as_view(),
+        name='rag_ask',
+    ),
 ]
