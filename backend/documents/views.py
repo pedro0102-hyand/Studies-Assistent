@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from .chroma_index import delete_chroma_for_document
 from .extraction import extract_and_save_document
@@ -67,6 +68,8 @@ class RagAskView(APIView):
     """POST /api/rag/ask/ — RAG com JWT; corpo: question, document_ids opcional."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'rag'
 
     def post(self, request):
         serializer = RagAskRequestSerializer(data=request.data)

@@ -33,6 +33,12 @@ const router = createRouter({
       component: () => import('@/views/DocumentsView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/ask',
+      name: 'ask',
+      component: () => import('@/views/AskView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

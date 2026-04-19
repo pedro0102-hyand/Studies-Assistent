@@ -61,6 +61,9 @@ async function onLogout() {
         <RouterLink class="sa-btn sa-btn--secondary dash__docs-link" to="/documents">
           Gerir PDFs
         </RouterLink>
+        <RouterLink class="sa-btn sa-btn--secondary dash__docs-link" to="/ask">
+          Perguntar aos PDFs
+        </RouterLink>
         <button type="button" class="sa-btn sa-btn--ghost" @click="onLogout">Terminar sessão</button>
       </div>
     </section>

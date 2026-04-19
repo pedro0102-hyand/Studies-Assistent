@@ -63,6 +63,9 @@ RAG_SYSTEM_PROMPT = _rag_sys or (
     'diz claramente que não há informação nos documentos.'
 )
 
+# Etapa 5.7 — limite de pedidos ao endpoint RAG (DRF ScopedRateThrottle)
+_rag_throttle_rate = os.environ.get('RAG_THROTTLE_RATE', '30/min').strip() or '30/min'
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -239,7 +242,19 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
+    'DEFAULT_THROTTLE_RATES': {
+        'rag': _rag_throttle_rate,
+    },
 }
+
+if 'test' in sys.argv:
+    REST_FRAMEWORK = {
+        **REST_FRAMEWORK,
+        'DEFAULT_THROTTLE_RATES': {
+            **REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],
+            'rag': '100000/min',
+        },
+    }
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),

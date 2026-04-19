@@ -27,6 +27,7 @@ async function onLogout() {
           <template v-else>
             <RouterLink class="nav-link" to="/app">Área da app</RouterLink>
             <RouterLink class="nav-link" to="/documents">PDFs</RouterLink>
+            <RouterLink class="nav-link" to="/ask">Perguntar</RouterLink>
             <button type="button" class="nav-link nav-link--logout" @click="onLogout">Sair</button>
           </template>
         </nav>
