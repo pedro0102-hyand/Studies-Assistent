@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from dotenv import load_dotenv
 
@@ -107,13 +108,51 @@ WSGI_APPLICATION = 'studies_assistant.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+#
+# SQLite (predefinição) ou PostgreSQL via `DATABASE_URL` ou `USE_POSTGRES` + `POSTGRES_*`.
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+
+def _postgres_from_url(url: str) -> dict:
+    u = urlparse(url)
+    dbname = (u.path or '/').lstrip('/') or ''
+    return {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': dbname,
+        'USER': unquote(u.username or ''),
+        'PASSWORD': unquote(u.password or ''),
+        'HOST': u.hostname or 'localhost',
+        'PORT': str(u.port or 5432),
     }
-}
+
+
+def _build_databases() -> dict:
+    db_url = os.environ.get('DATABASE_URL', '').strip()
+    if db_url:
+        return {'default': _postgres_from_url(db_url)}
+
+    use_pg = os.environ.get('USE_POSTGRES', '').lower() in ('1', 'true', 'yes')
+    pg_db = os.environ.get('POSTGRES_DB', '').strip()
+    if use_pg and pg_db:
+        return {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': pg_db,
+                'USER': os.environ.get('POSTGRES_USER', 'postgres'),
+                'PASSWORD': os.environ.get('POSTGRES_PASSWORD', ''),
+                'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+                'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+            }
+        }
+
+    return {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+
+DATABASES = _build_databases()
 
 
 # Password validation
