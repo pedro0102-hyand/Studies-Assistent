@@ -24,7 +24,7 @@ async function onSubmit() {
   )
   pending.value = false
   if (!r.ok) {
-    error.value = r.error ?? 'Registo falhou'
+    error.value = r.error ?? 'Cadastro falhou'
     return
   }
   await router.replace('/app')
@@ -36,9 +36,9 @@ async function onSubmit() {
     <aside class="auth__aside" aria-hidden="true">
       <div class="auth__aside-inner">
         <p class="auth__aside-tag">Novo por aqui?</p>
-        <h2 class="auth__aside-title">Cria a tua conta em poucos segundos.</h2>
+        <h2 class="auth__aside-title">Crie um cadastro e potencialize seus estudos.</h2>
         <p class="auth__aside-text">
-          Vais poder sincronizar sessão com JWT e aceder às rotas protegidas da aplicação.
+          Cadastre-se de forma fácil e segura .
         </p>
       </div>
     </aside>
@@ -51,7 +51,7 @@ async function onSubmit() {
       <div class="auth__card sa-card sa-card--pad sa-card--elevated">
         <header class="auth__head">
           <h1 class="auth__h1">Criar conta</h1>
-          <p class="auth__sub">Escolhe um utilizador e uma palavra-passe segura.</p>
+          <p class="auth__sub"> Crie um usuário e senha e aproveite.</p>
         </header>
 
         <form class="auth__form" @submit.prevent="onSubmit">
@@ -112,8 +112,8 @@ async function onSubmit() {
         </form>
 
         <p class="auth__footer">
-          Já tens conta?
-          <RouterLink to="/login">Entrar</RouterLink>
+          Já tem um cadastro ?
+          <RouterLink to="/login"> Entrar</RouterLink>
         </p>
       </div>
     </main>

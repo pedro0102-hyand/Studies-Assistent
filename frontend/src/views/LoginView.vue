@@ -31,9 +31,9 @@ async function onSubmit() {
     <aside class="auth__aside" aria-hidden="true">
       <div class="auth__aside-inner">
         <p class="auth__aside-tag">Bem-vindo de volta</p>
-        <h2 class="auth__aside-title">Continua os teus estudos de onde paraste.</h2>
+        <h2 class="auth__aside-title">Continue os seus estudos agora mesmo </h2>
         <p class="auth__aside-text">
-          Acesso seguro com JWT. As tuas credenciais são enviadas apenas ao servidor da API.
+          
         </p>
       </div>
     </aside>
@@ -46,7 +46,7 @@ async function onSubmit() {
       <div class="auth__card sa-card sa-card--pad sa-card--elevated">
         <header class="auth__head">
           <h1 class="auth__h1">Entrar</h1>
-          <p class="auth__sub">Utiliza a tua conta para aceder à área autenticada.</p>
+          <p class="auth__sub">preencha seus dados.</p>
         </header>
 
         <form class="auth__form" @submit.prevent="onSubmit">
@@ -83,7 +83,7 @@ async function onSubmit() {
         </form>
 
         <p class="auth__footer">
-          Ainda não tens conta?
+          Ainda não tem uma conta?
           <RouterLink to="/register">Criar conta</RouterLink>
         </p>
       </div>
