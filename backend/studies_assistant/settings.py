@@ -65,6 +65,8 @@ RAG_SYSTEM_PROMPT = _rag_sys or (
 
 # Etapa 5.7 — limite de pedidos ao endpoint RAG (DRF ScopedRateThrottle)
 _rag_throttle_rate = os.environ.get('RAG_THROTTLE_RATE', '30/min').strip() or '30/min'
+# Etapa 6 — chat (listar conversas / enviar mensagens)
+_chat_throttle_rate = os.environ.get('CHAT_THROTTLE_RATE', '60/min').strip() or '60/min'
 
 
 # Quick-start development settings - unsuitable for production
@@ -93,6 +95,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'core',
     'documents',
+    'chat',
 ]
 
 MIDDLEWARE = [
@@ -244,6 +247,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'rag': _rag_throttle_rate,
+        'chat': _chat_throttle_rate,
     },
 }
 
@@ -253,6 +257,7 @@ if 'test' in sys.argv:
         'DEFAULT_THROTTLE_RATES': {
             **REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],
             'rag': '100000/min',
+            'chat': '100000/min',
         },
     }
 

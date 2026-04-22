@@ -9,6 +9,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('core.urls')),
     path('api/', include('documents.urls')),
+    path('api/', include('chat.urls')),
 ]
 
 # Etapa 3.2 — servir ficheiros enviados em desenvolvimento (não usar isto em produção)
