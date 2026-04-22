@@ -34,6 +34,7 @@ const messagesLoading = ref(false)
 const sendPending = ref(false)
 const sendError = ref<string | null>(null)
 const messagesEnd = ref<HTMLElement | null>(null)
+const composeInput = ref<HTMLTextAreaElement | null>(null)
 
 async function loadConversations() {
   listError.value = null
@@ -76,6 +77,7 @@ async function loadMessages(id: number) {
 function selectConversation(id: number) {
   selectedId.value = id
   void loadMessages(id)
+  void nextTick(() => composeInput.value?.focus())
 }
 
 async function newConversation() {
@@ -93,6 +95,7 @@ async function newConversation() {
     const conv = (await res.json()) as ApiConversation
     await loadConversations()
     selectConversation(conv.id)
+    await nextTick(() => composeInput.value?.focus())
   } catch (e) {
     listError.value = e instanceof Error ? e.message : 'Falha ao criar conversa'
   }
@@ -151,6 +154,7 @@ async function send() {
     sendError.value = e instanceof Error ? e.message : 'Falha ao enviar'
   } finally {
     sendPending.value = false
+    await nextTick(() => composeInput.value?.focus())
   }
 }
 
@@ -228,6 +232,9 @@ onMounted(() => {
         <div class="chat-messages" role="log" aria-live="polite">
           <p v-if="messagesLoading" class="chat-muted">A carregar mensagens…</p>
           <template v-else>
+            <p v-if="messages.length === 0" class="chat-muted chat-messages__empty">
+              Ainda sem mensagens. Escreve abaixo e envia — a resposta usa os teus PDFs (RAG).
+            </p>
             <div
               v-for="m in messages"
               :key="m.id"
@@ -250,8 +257,10 @@ onMounted(() => {
 
         <div class="chat-compose">
           <p v-if="sendError" class="chat-err" role="alert">{{ sendError }}</p>
+          <p class="chat-compose__hint">Enter envia · Shift+Enter nova linha</p>
           <div class="chat-compose__row">
             <textarea
+              ref="composeInput"
               v-model="input"
               class="chat-compose__input"
               rows="2"
@@ -443,6 +452,12 @@ onMounted(() => {
   gap: 0.75rem;
 }
 
+.chat-messages__empty {
+  margin: 0.5rem 0 0;
+  max-width: 28rem;
+  line-height: 1.5;
+}
+
 .chat-bubble {
   max-width: 92%;
   padding: 0.65rem 0.85rem;
@@ -508,6 +523,12 @@ onMounted(() => {
 .chat-compose {
   padding: 0.75rem 1rem 1rem;
   border-top: 1px solid var(--sa-border);
+}
+
+.chat-compose__hint {
+  font-size: 0.72rem;
+  color: var(--sa-text-muted);
+  margin: 0 0 0.4rem;
 }
 
 .chat-compose__row {

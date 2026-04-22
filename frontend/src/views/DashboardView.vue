@@ -55,17 +55,15 @@ async function onLogout() {
 
       <p class="profile__hint">
         Esta vista corresponde à rota protegida <code>/app</code> (<code>requiresAuth</code> no router).
+        Uma pergunta avulsa sem histórico: <RouterLink to="/ask">/ask</RouterLink>.
       </p>
 
       <div class="profile__actions">
         <RouterLink class="sa-btn sa-btn--secondary dash__docs-link" to="/documents">
           Gerir PDFs
         </RouterLink>
-        <RouterLink class="sa-btn sa-btn--secondary dash__docs-link" to="/chat">
+        <RouterLink class="sa-btn sa-btn--primary dash__docs-link" to="/chat">
           Chat com PDFs
-        </RouterLink>
-        <RouterLink class="sa-btn sa-btn--secondary dash__docs-link" to="/ask">
-          Pergunta rápida
         </RouterLink>
         <button type="button" class="sa-btn sa-btn--ghost" @click="onLogout">Terminar sessão</button>
       </div>
@@ -185,6 +183,16 @@ async function onLogout() {
   font-size: 0.85rem;
   color: var(--sa-text-muted);
   line-height: 1.55;
+}
+
+.profile__hint :deep(a) {
+  color: var(--sa-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.profile__hint :deep(a:hover) {
+  text-decoration: underline;
 }
 
 .profile__actions {
