@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
+import { useAuth } from '@/composables/useAuth'
 
 export interface ApiDocument {
   id: number
@@ -18,15 +19,16 @@ export interface ApiDocument {
   updated_at: string
 }
 
+const router = useRouter()
+const { user, logout } = useAuth()
+
 const documents = ref<ApiDocument[]>([])
 const listLoading = ref(true)
 const listError = ref<string | null>(null)
-
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploadPending = ref(false)
 const uploadMessage = ref<string | null>(null)
 const uploadError = ref<string | null>(null)
-
 const deletePending = ref<number | null>(null)
 
 async function loadDocuments() {
@@ -34,13 +36,10 @@ async function loadDocuments() {
   listLoading.value = true
   try {
     const res = await apiFetch('/api/documents/')
-    if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { detail?: string }
-      throw new Error(err.detail ?? `Erro ${res.status}`)
-    }
+    if (!res.ok) throw new Error(`Erro ${res.status}`)
     documents.value = (await res.json()) as ApiDocument[]
   } catch (e) {
-    listError.value = e instanceof Error ? e.message : 'Falha ao carregar documentos'
+    listError.value = e instanceof Error ? e.message : 'Erro ao carregar'
     documents.value = []
   } finally {
     listLoading.value = false
@@ -73,16 +72,9 @@ async function onFileChange(ev: Event) {
     })
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
-      const detail = data.detail
-      const msg =
-        typeof detail === 'string'
-          ? detail
-          : Array.isArray(detail)
-            ? JSON.stringify(detail)
-            : `Erro ${res.status}`
-      throw new Error(msg)
+      throw new Error(typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`)
     }
-    uploadMessage.value = `“${file.name}” enviado com sucesso.`
+    uploadMessage.value = `"${file.name}" enviado com sucesso.`
     await loadDocuments()
   } catch (e) {
     uploadError.value = e instanceof Error ? e.message : 'Falha no envio'
@@ -92,19 +84,16 @@ async function onFileChange(ev: Event) {
 }
 
 async function removeDoc(doc: ApiDocument) {
-  if (!confirm(`Apagar “${doc.original_name}”?`)) return
+  if (!confirm(`Apagar "${doc.original_name}"?`)) return
   deletePending.value = doc.id
   uploadError.value = null
   try {
     const res = await apiFetch(`/api/documents/${doc.id}/`, { method: 'DELETE' })
-    if (!res.ok && res.status !== 204) {
-      const err = (await res.json().catch(() => ({}))) as { detail?: string }
-      throw new Error(err.detail ?? `Erro ${res.status}`)
-    }
-    await loadDocuments()
+    if (!res.ok && res.status !== 204) throw new Error(`Erro ${res.status}`)
     uploadMessage.value = 'Documento removido.'
+    await loadDocuments()
   } catch (e) {
-    uploadError.value = e instanceof Error ? e.message : 'Falha ao apagar'
+    uploadError.value = e instanceof Error ? e.message : 'Erro ao apagar'
   } finally {
     deletePending.value = null
   }
@@ -112,13 +101,21 @@ async function removeDoc(doc: ApiDocument) {
 
 function formatDate(iso: string) {
   try {
-    return new Date(iso).toLocaleString('pt-PT', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    })
-  } catch {
-    return iso
-  }
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+  } catch { return iso }
+}
+
+function statusInfo(doc: ApiDocument) {
+  if (doc.extraction_error) return { type: 'error', text: 'Erro na extração' }
+  if (doc.chroma_indexed_at) return { type: 'ok', text: 'Indexado' }
+  if (doc.chroma_error) return { type: 'warn', text: 'Erro no índice' }
+  if (doc.embedded_chunk_count) return { type: 'warn', text: 'Aguardando indexação' }
+  return { type: 'idle', text: 'Processando...' }
+}
+
+async function onLogout() {
+  await logout()
+  router.push('/login')
 }
 
 onMounted(() => {
@@ -127,262 +124,408 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="sa-page docs">
-    <RouterLink class="sa-page__back" to="/app">
-      <span aria-hidden="true">←</span> Área da app
-    </RouterLink>
+  <div class="docs-layout">
 
-    <header class="docs__header">
-      <h1 class="docs__title">Os teus PDFs</h1>
-      <p class="docs__lead">
-        Envia ficheiros para o servidor, consulta a lista e apaga quando já não precisares.
-      </p>
-    </header>
+    <!-- Sidebar -->
+    <aside class="docs-sidebar">
+      <div class="docs-sidebar-top">
+        <button class="back-btn" @click="router.push('/chat')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Chat
+        </button>
+      </div>
 
-    <section class="sa-card sa-card--pad sa-card--elevated docs__upload">
-      <h2 class="docs__h2">Enviar PDF</h2>
-      <p class="docs__hint">Máx. 25 MB · apenas <code>.pdf</code></p>
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".pdf,application/pdf"
-        class="docs__hidden-input"
-        @change="onFileChange"
-      />
-      <button
-        type="button"
-        class="sa-btn sa-btn--primary"
-        :disabled="uploadPending"
-        @click="pickFile"
-      >
-        {{ uploadPending ? 'A enviar…' : 'Escolher ficheiro' }}
-      </button>
-      <p v-if="uploadMessage" class="docs__ok" role="status">{{ uploadMessage }}</p>
-      <p v-if="uploadError" class="docs__err" role="alert">{{ uploadError }}</p>
-    </section>
+      <div class="docs-sidebar-bottom">
+        <button class="sidebar-user" @click="onLogout">
+          <div class="user-avatar">{{ user?.username?.[0]?.toUpperCase() ?? '?' }}</div>
+          <span class="user-name">{{ user?.username }}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
 
-    <section class="docs__list-wrap">
-      <h2 class="docs__h2">Documentos</h2>
+    <!-- Conteúdo principal -->
+    <main class="docs-main">
+      <div class="docs-content">
 
-      <p v-if="listLoading" class="docs__muted">A carregar…</p>
-      <p v-else-if="listError" class="docs__err">{{ listError }}</p>
-      <p v-else-if="documents.length === 0" class="docs__muted">Ainda não tens PDFs enviados.</p>
+        <header class="docs-header">
+          <h1 class="docs-title">Meus PDFs</h1>
+          <p class="docs-sub">Envie documentos para usar no chat. Máx. 25 MB por arquivo.</p>
+        </header>
 
-      <ul v-else class="docs__list" aria-label="Lista de PDFs">
-        <li v-for="doc in documents" :key="doc.id" class="docs__item sa-card sa-card--pad">
-          <div class="docs__item-main">
-            <span class="docs__name" :title="doc.original_name">{{ doc.original_name }}</span>
-            <span class="docs__date">{{ formatDate(doc.created_at) }}</span>
-            <span
-              v-if="doc.extraction_error"
-              class="docs__meta docs__meta--err"
-              :title="doc.extraction_error"
-            >
-              {{ doc.extraction_error }}
-            </span>
-            <template v-else>
-              <span class="docs__meta">
-                {{ doc.text_char_count ?? 0 }} caracteres · {{ doc.chunk_count ?? 0 }} chunks
-                <template v-if="(doc.chunk_count ?? 0) > 0">
-                  · {{ doc.embedded_chunk_count ?? 0 }} embeddings
-                  <template v-if="doc.chroma_indexed_at"> · Chroma OK</template>
-                </template>
-              </span>
-              <span
-                v-if="doc.embedding_error"
-                class="docs__meta docs__meta--warn"
-                :title="doc.embedding_error"
-              >
-                Embeddings: {{ doc.embedding_error }}
-              </span>
-              <span
-                v-if="doc.chroma_error"
-                class="docs__meta docs__meta--warn"
-                :title="doc.chroma_error"
-              >
-                Chroma: {{ doc.chroma_error }}
-              </span>
-            </template>
+        <!-- Upload -->
+        <div class="upload-area">
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".pdf,application/pdf"
+            class="sr-only"
+            @change="onFileChange"
+          />
+          <button
+            class="btn btn-secondary upload-btn"
+            :disabled="uploadPending"
+            @click="pickFile"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 16 12 12 8 16"/>
+              <line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+            {{ uploadPending ? 'Enviando...' : 'Enviar PDF' }}
+          </button>
+
+          <div v-if="uploadMessage" class="feedback-ok">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            {{ uploadMessage }}
           </div>
-          <div class="docs__item-actions">
-            <a
-              :href="doc.file_url"
-              class="docs__link"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Abrir
-            </a>
-            <button
-              type="button"
-              class="sa-btn sa-btn--ghost docs__del"
-              :disabled="deletePending === doc.id"
-              @click="removeDoc(doc)"
-            >
-              {{ deletePending === doc.id ? '…' : 'Apagar' }}
-            </button>
+          <div v-if="uploadError" class="feedback-err">{{ uploadError }}</div>
+        </div>
+
+        <!-- Lista -->
+        <div class="docs-list-area">
+          <div v-if="listLoading" class="list-loading">
+            <div class="skel-row" /><div class="skel-row" /><div class="skel-row skel-row--sm" />
           </div>
-        </li>
-      </ul>
-    </section>
-  </main>
+          <div v-else-if="listError" class="feedback-err">{{ listError }}</div>
+          <div v-else-if="documents.length === 0" class="list-empty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <p>Nenhum PDF ainda. Envie um arquivo para começar.</p>
+          </div>
+          <ul v-else class="doc-list">
+            <li v-for="doc in documents" :key="doc.id" class="doc-item">
+              <div class="doc-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              </div>
+              <div class="doc-info">
+                <span class="doc-name" :title="doc.original_name">{{ doc.original_name }}</span>
+                <div class="doc-meta">
+                  <span
+                    class="doc-status"
+                    :class="`status-${statusInfo(doc).type}`"
+                  >{{ statusInfo(doc).text }}</span>
+                  <span class="doc-sep">·</span>
+                  <span>{{ doc.chunk_count ?? 0 }} chunks</span>
+                  <span class="doc-sep">·</span>
+                  <span>{{ formatDate(doc.created_at) }}</span>
+                </div>
+              </div>
+              <div class="doc-actions">
+                <a
+                  :href="doc.file_url"
+                  target="_blank"
+                  rel="noopener"
+                  class="btn btn-ghost btn-icon"
+                  title="Abrir arquivo"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </a>
+                <button
+                  class="btn btn-ghost btn-icon"
+                  :disabled="deletePending === doc.id"
+                  title="Apagar"
+                  @click="removeDoc(doc)"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                  </svg>
+                </button>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+      </div>
+    </main>
+  </div>
 </template>
 
 <style scoped>
-.docs {
-  padding-bottom: 3rem;
-  max-width: 42rem;
+.docs-layout {
+  display: flex;
+  height: 100vh;
+  background: var(--bg);
 }
 
-.docs__header {
-  margin-bottom: 1.5rem;
-}
-
-.docs__title {
-  font-size: clamp(1.45rem, 3vw, 1.85rem);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--sa-text);
-  margin-bottom: 0.35rem;
-}
-
-.docs__lead {
-  font-size: 0.95rem;
-  color: var(--sa-text-muted);
-  line-height: 1.55;
-}
-
-.docs__h2 {
-  font-size: 1rem;
-  font-weight: 700;
-  margin-bottom: 0.35rem;
-  color: var(--sa-text);
-}
-
-.docs__hint {
-  font-size: 0.85rem;
-  color: var(--sa-text-muted);
-  margin-bottom: 1rem;
-}
-
-.docs__upload {
-  margin-bottom: 2rem;
-}
-
-.docs__hidden-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  border: 0;
-}
-
-.docs__ok {
-  margin-top: 0.85rem;
-  font-size: 0.9rem;
-  color: var(--sa-success);
-}
-
-.docs__err {
-  margin-top: 0.85rem;
-  font-size: 0.9rem;
-  color: var(--sa-danger);
-}
-
-.docs__muted {
-  font-size: 0.95rem;
-  color: var(--sa-text-muted);
-}
-
-.docs__list {
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0 0;
+/* Sidebar */
+.docs-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  padding: 0.75rem 0.5rem;
 }
 
-.docs__item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.docs__item-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
+.docs-sidebar-top {
   flex: 1;
 }
 
-.docs__name {
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.docs-sidebar-bottom {
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.12s;
+}
+
+.sidebar-user:hover {
+  background: var(--bg-hover);
+}
+
+.user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: var(--sa-text);
+  flex-shrink: 0;
+}
+
+.user-name {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.docs__date {
-  font-size: 0.8rem;
-  color: var(--sa-text-muted);
+/* Main */
+.docs-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem 1.5rem;
 }
 
-.docs__meta {
-  font-size: 0.75rem;
-  color: var(--sa-text-muted);
-  line-height: 1.35;
+.docs-content {
+  max-width: 640px;
+  margin: 0 auto;
 }
 
-.docs__meta--err {
-  color: var(--sa-danger);
+.docs-header {
+  margin-bottom: 1.75rem;
 }
 
-.docs__meta--warn {
-  color: var(--sa-warning, #b45309);
+.docs-title {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.25rem;
 }
 
-.docs__item-actions {
+.docs-sub {
+  font-size: 0.875rem;
+  color: var(--text-2);
+}
+
+/* Upload */
+.upload-area {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+
+.upload-btn {
   gap: 0.5rem;
+}
+
+.feedback-ok {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+.feedback-err {
+  font-size: 0.8125rem;
+  color: var(--danger);
+}
+
+/* Lista */
+.docs-list-area {
+  display: flex;
+  flex-direction: column;
+}
+
+.list-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skel-row {
+  height: 58px;
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skel-row--sm {
+  height: 58px;
+  width: 70%;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 0.9rem;
+}
+
+.doc-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.doc-item:hover {
+  border-color: var(--border-strong);
+}
+
+.doc-icon {
+  color: var(--text-3);
   flex-shrink: 0;
 }
 
-.docs__link {
+.doc-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-name {
+  display: block;
   font-size: 0.875rem;
-  font-weight: 600;
-  padding: 0.4rem 0.75rem;
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--sa-border);
-  color: var(--sa-primary);
-  text-decoration: none;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.docs__link:hover {
-  background: var(--sa-primary-soft);
+.doc-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--text-3);
+  margin-top: 0.2rem;
 }
 
-.docs__del {
-  font-size: 0.875rem;
-  padding: 0.4rem 0.65rem;
+.doc-sep {
+  color: var(--border-strong);
 }
 
-@media (max-width: 520px) {
-  .docs__item {
-    flex-direction: column;
-    align-items: stretch;
+.doc-status {
+  font-weight: 500;
+}
+
+.status-ok { color: var(--accent); }
+.status-warn { color: #f59e0b; }
+.status-error { color: var(--danger); }
+.status-idle { color: var(--text-3); }
+
+.doc-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.doc-actions .btn-ghost {
+  color: var(--text-3);
+}
+
+.doc-actions .btn-ghost:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+/* Responsivo */
+@media (max-width: 600px) {
+  .docs-sidebar {
+    display: none;
   }
 
-  .docs__item-actions {
-    justify-content: flex-end;
+  .docs-main {
+    padding: 1.25rem 1rem;
   }
 }
 </style>

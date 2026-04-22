@@ -52,6 +52,18 @@ class ConversationDetailDeleteView(APIView):
         conv = get_object_or_404(Conversation, pk=pk, user=request.user)
         conv.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    def patch(self, request, pk):
+        """Renomeia uma conversa (PATCH { "title": "novo nome" })."""
+        conv = get_object_or_404(Conversation, pk=pk, user=request.user)
+        title = (request.data.get('title') or '').strip()
+        if not title:
+            return Response({'detail': 'O título não pode ser vazio.'}, status=status.HTTP_400_BAD_REQUEST)
+        title = title[:255]
+        Conversation.objects.filter(pk=conv.pk).update(title=title)
+        conv.refresh_from_db()
+        out = ConversationSerializer(conv)
+        return Response(out.data)
 
 
 class ConversationMessagesView(APIView):

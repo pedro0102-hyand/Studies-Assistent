@@ -5,9 +5,12 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      // Redireciona raiz para /chat (autenticado) ou /login
       path: '/',
-      name: 'home',
-      component: () => import('@/views/HomeView.vue'),
+      redirect: () => {
+        const { user } = useAuth()
+        return user.value ? '/chat' : '/login'
+      },
     },
     {
       path: '/login',
@@ -22,9 +25,9 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
-      path: '/app',
-      name: 'dashboard',
-      component: () => import('@/views/DashboardView.vue'),
+      path: '/chat',
+      name: 'chat',
+      component: () => import('@/views/ChatView.vue'),
       meta: { requiresAuth: true },
     },
     {
@@ -33,18 +36,9 @@ const router = createRouter({
       component: () => import('@/views/DocumentsView.vue'),
       meta: { requiresAuth: true },
     },
-    {
-      path: '/ask',
-      name: 'ask',
-      component: () => import('@/views/AskView.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/chat',
-      name: 'chat',
-      component: () => import('@/views/ChatView.vue'),
-      meta: { requiresAuth: true },
-    },
+    // Redireciona rotas antigas
+    { path: '/app', redirect: '/chat' },
+    { path: '/ask', redirect: '/chat' },
   ],
 })
 
@@ -61,7 +55,7 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (to.meta.guestOnly && user.value) {
-    next({ name: 'home' })
+    next({ name: 'chat' })
     return
   }
 

@@ -3,108 +3,124 @@
 *::after {
   box-sizing: border-box;
   margin: 0;
+  padding: 0;
 }
 
 :root {
-  /* Brand — indigo + violet */
-  --sa-primary: #4f46e5;
-  --sa-primary-hover: #4338ca;
-  --sa-primary-soft: rgba(79, 70, 229, 0.12);
-  --sa-accent: #7c3aed;
+  /* Cores principais */
+  --bg: #0d0d0d;
+  --bg-2: #161616;
+  --bg-3: #1e1e1e;
+  --bg-hover: #252525;
+  --bg-active: #2a2a2a;
+  --border: rgba(255,255,255,0.08);
+  --border-strong: rgba(255,255,255,0.14);
 
-  --sa-bg: #f8fafc;
-  --sa-bg-elevated: #ffffff;
-  --sa-surface: #ffffff;
-  --sa-border: #e2e8f0;
-  --sa-border-strong: #cbd5e1;
+  --text: #f2f2f2;
+  --text-2: #a0a0a0;
+  --text-3: #666;
 
-  --sa-text: #0f172a;
-  --sa-text-muted: #64748b;
-  --sa-text-subtle: #94a3b8;
+  --accent: #10a37f;
+  --accent-hover: #0d8f6f;
+  --accent-soft: rgba(16, 163, 127, 0.12);
+  --accent-soft-2: rgba(16, 163, 127, 0.2);
 
-  --sa-success: #059669;
-  --sa-success-bg: #ecfdf5;
-  --sa-danger: #dc2626;
-  --sa-danger-bg: #fef2f2;
+  --danger: #e5534b;
+  --danger-bg: rgba(229, 83, 75, 0.1);
 
-  --sa-radius: 12px;
-  --sa-radius-sm: 8px;
-  --sa-radius-full: 9999px;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
 
-  --sa-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  --sa-shadow-md: 0 4px 24px rgba(15, 23, 42, 0.08);
-  --sa-shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.12);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.5);
 
-  --sa-header-h: 3.75rem;
-  --sa-focus: 0 0 0 3px rgba(79, 70, 229, 0.35);
-  --sa-max: 1120px;
-  --sa-max-narrow: 420px;
-}
+  --sidebar-w: 260px;
+  --header-h: 52px;
+  --input-h: 52px;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --sa-bg: #0c0f1a;
-    --sa-bg-elevated: #12172a;
-    --sa-surface: #161c2e;
-    --sa-border: #2d3748;
-    --sa-border-strong: #4a5568;
+  --font: 'Söhne', 'ui-sans-serif', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Söhne Mono', 'ui-monospace', 'SF Mono', monospace;
 
-    --sa-text: #f1f5f9;
-    --sa-text-muted: #94a3b8;
-    --sa-text-subtle: #64748b;
-
-    --sa-primary-soft: rgba(99, 102, 241, 0.2);
-    --sa-success-bg: rgba(5, 150, 105, 0.15);
-    --sa-danger-bg: rgba(220, 38, 38, 0.12);
-
-    --sa-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-    --sa-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.35);
-    --sa-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
-  }
+  color-scheme: dark;
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+  height: 100%;
 }
 
 body {
-  min-height: 100vh;
-  color: var(--sa-text);
-  background: var(--sa-bg);
-  line-height: 1.6;
-  font-family:
-    'Plus Jakarta Sans',
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  font-family: var(--font);
   font-size: 15px;
-  text-rendering: optimizeLegibility;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  height: 100%;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #app {
-  min-height: 100vh;
+  height: 100%;
 }
 
 a {
-  color: var(--sa-primary);
+  color: var(--accent);
   text-decoration: none;
-  font-weight: 500;
-  transition: color 0.15s ease, opacity 0.15s ease;
 }
 
 a:hover {
-  color: var(--sa-primary-hover);
+  text-decoration: underline;
+}
+
+button {
+  font-family: var(--font);
+  cursor: pointer;
+}
+
+input, textarea {
+  font-family: var(--font);
 }
 
 code {
-  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
-  font-size: 0.88em;
-  padding: 0.15em 0.4em;
-  border-radius: 6px;
-  background: var(--sa-primary-soft);
-  color: var(--sa-text);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--bg-3);
+  padding: 0.15em 0.45em;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}
+
+/* Utilities */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  border: 0;
 }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { nextTick, onMounted, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
+import { useAuth } from '@/composables/useAuth'
 
 export interface ApiConversation {
   id: number
@@ -24,30 +25,44 @@ export interface ApiChatMessage {
   created_at: string
 }
 
+const router = useRouter()
+const { user, logout } = useAuth()
+
 const conversations = ref<ApiConversation[]>([])
 const selectedId = ref<number | null>(null)
 const messages = ref<ApiChatMessage[]>([])
 const input = ref('')
 const listLoading = ref(true)
-const listError = ref<string | null>(null)
 const messagesLoading = ref(false)
 const sendPending = ref(false)
 const sendError = ref<string | null>(null)
+const listError = ref<string | null>(null)
 const messagesEnd = ref<HTMLElement | null>(null)
-const composeInput = ref<HTMLTextAreaElement | null>(null)
+const composeRef = ref<HTMLTextAreaElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const sidebarOpen = ref(true)
+const showSources = ref<number | null>(null)
+const attachedFile = ref<File | null>(null)
 
+// Renomear conversa
+const renamingId = ref<number | null>(null)
+const renameValue = ref('')
+const renameInputRef = ref<HTMLInputElement | null>(null)
+
+const selectedConv = computed(() =>
+  conversations.value.find((c) => c.id === selectedId.value)
+)
+
+// ── Conversas ──────────────────────────────────────────────
 async function loadConversations() {
-  listError.value = null
   listLoading.value = true
+  listError.value = null
   try {
     const res = await apiFetch('/api/chat/conversations/')
-    if (!res.ok) {
-      const d = (await res.json().catch(() => ({}))) as { detail?: string }
-      throw new Error(d.detail ?? `Erro ${res.status}`)
-    }
+    if (!res.ok) throw new Error(`Erro ${res.status}`)
     conversations.value = (await res.json()) as ApiConversation[]
   } catch (e) {
-    listError.value = e instanceof Error ? e.message : 'Falha ao carregar conversas'
+    listError.value = e instanceof Error ? e.message : 'Erro ao carregar'
     conversations.value = []
   } finally {
     listLoading.value = false
@@ -57,27 +72,24 @@ async function loadConversations() {
 async function loadMessages(id: number) {
   messagesLoading.value = true
   sendError.value = null
+  messages.value = []
   try {
     const res = await apiFetch(`/api/chat/conversations/${id}/messages/`)
-    if (!res.ok) {
-      const d = (await res.json().catch(() => ({}))) as { detail?: string }
-      throw new Error(d.detail ?? `Erro ${res.status}`)
-    }
+    if (!res.ok) throw new Error(`Erro ${res.status}`)
     messages.value = (await res.json()) as ApiChatMessage[]
     await nextTick()
-    messagesEnd.value?.scrollIntoView({ behavior: 'smooth' })
-  } catch (e) {
-    sendError.value = e instanceof Error ? e.message : 'Falha ao carregar mensagens'
-    messages.value = []
+    scrollBottom()
   } finally {
     messagesLoading.value = false
   }
 }
 
 function selectConversation(id: number) {
+  if (renamingId.value !== null) cancelRename()
   selectedId.value = id
   void loadMessages(id)
-  void nextTick(() => composeInput.value?.focus())
+  if (window.innerWidth < 700) sidebarOpen.value = false
+  nextTick(() => composeRef.value?.focus())
 }
 
 async function newConversation() {
@@ -88,487 +100,1183 @@ async function newConversation() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    if (!res.ok) {
-      const d = (await res.json().catch(() => ({}))) as { detail?: string }
-      throw new Error(d.detail ?? `Erro ${res.status}`)
-    }
+    if (!res.ok) throw new Error(`Erro ${res.status}`)
     const conv = (await res.json()) as ApiConversation
     await loadConversations()
     selectConversation(conv.id)
-    await nextTick(() => composeInput.value?.focus())
   } catch (e) {
-    listError.value = e instanceof Error ? e.message : 'Falha ao criar conversa'
+    listError.value = e instanceof Error ? e.message : 'Erro ao criar'
   }
 }
 
 async function removeConversation(id: number, ev: Event) {
   ev.stopPropagation()
-  if (!confirm('Apagar esta conversa e todo o histórico?')) return
+  if (!confirm('Apagar esta conversa?')) return
   try {
-    const res = await apiFetch(`/api/chat/conversations/${id}/`, { method: 'DELETE' })
-    if (!res.ok && res.status !== 204) {
-      const d = (await res.json().catch(() => ({}))) as { detail?: string }
-      throw new Error(d.detail ?? `Erro ${res.status}`)
-    }
+    await apiFetch(`/api/chat/conversations/${id}/`, { method: 'DELETE' })
     if (selectedId.value === id) {
       selectedId.value = null
       messages.value = []
     }
     await loadConversations()
-  } catch (e) {
-    listError.value = e instanceof Error ? e.message : 'Falha ao apagar'
+  } catch {}
+}
+
+// ── Renomear ───────────────────────────────────────────────
+function startRename(conv: ApiConversation, ev: Event) {
+  ev.stopPropagation()
+  renamingId.value = conv.id
+  renameValue.value = conv.title || ''
+  nextTick(() => {
+    renameInputRef.value?.focus()
+    renameInputRef.value?.select()
+  })
+}
+
+function cancelRename() {
+  renamingId.value = null
+  renameValue.value = ''
+}
+
+async function confirmRename(id: number) {
+  const title = renameValue.value.trim()
+  renamingId.value = null
+  if (!title) return
+  try {
+    const res = await apiFetch(`/api/chat/conversations/${id}/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    })
+    if (res.ok) {
+      await loadConversations()
+    } else {
+      // Fallback local caso endpoint PATCH não exista
+      const idx = conversations.value.findIndex((c) => c.id === id)
+      if (idx !== -1) conversations.value[idx].title = title
+    }
+  } catch {
+    const idx = conversations.value.findIndex((c) => c.id === id)
+    if (idx !== -1) conversations.value[idx].title = title
   }
 }
 
+function onRenameKeydown(e: KeyboardEvent, id: number) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmRename(id) }
+  if (e.key === 'Escape') cancelRename()
+}
+
+// ── Envio ──────────────────────────────────────────────────
 async function send() {
   const id = selectedId.value
   const text = input.value.trim()
-  if (!id || !text || sendPending.value) return
+  if (!id || (!text && !attachedFile.value) || sendPending.value) return
 
   sendPending.value = true
   sendError.value = null
+
+  const displayText = text || (attachedFile.value ? `[Arquivo: ${attachedFile.value.name}]` : '')
+  const userMsg: ApiChatMessage = {
+    id: Date.now(),
+    role: 'user',
+    content: displayText,
+    sources: [],
+    created_at: new Date().toISOString(),
+  }
+  messages.value = [...messages.value, userMsg]
+  input.value = ''
+  const sentFile = attachedFile.value
+  attachedFile.value = null
+  autoResize()
+  await nextTick()
+  scrollBottom()
+
   try {
-    const res = await apiFetch(`/api/chat/conversations/${id}/messages/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text }),
-    })
+    let res: Response
+    if (sentFile) {
+      const form = new FormData()
+      if (text) form.append('content', text)
+      else form.append('content', `[Arquivo: ${sentFile.name}]`)
+      form.append('file', sentFile)
+      res = await apiFetch(`/api/chat/conversations/${id}/messages/`, {
+        method: 'POST',
+        body: form,
+      })
+    } else {
+      res = await apiFetch(`/api/chat/conversations/${id}/messages/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text }),
+      })
+    }
+
     const data = (await res.json().catch(() => ({}))) as {
       detail?: string
       user_message?: ApiChatMessage
       assistant_message?: ApiChatMessage
     }
-    if (!res.ok) {
-      throw new Error(typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`)
-    }
-    input.value = ''
+    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`)
+
     if (data.user_message && data.assistant_message) {
-      messages.value = [...messages.value, data.user_message, data.assistant_message]
+      messages.value = messages.value
+        .filter((m) => m.id !== userMsg.id)
+        .concat([data.user_message, data.assistant_message])
     } else {
       await loadMessages(id)
     }
     await loadConversations()
     await nextTick()
-    messagesEnd.value?.scrollIntoView({ behavior: 'smooth' })
+    scrollBottom()
   } catch (e) {
-    sendError.value = e instanceof Error ? e.message : 'Falha ao enviar'
+    sendError.value = e instanceof Error ? e.message : 'Erro ao enviar'
+    messages.value = messages.value.filter((m) => m.id !== userMsg.id)
   } finally {
     sendPending.value = false
-    await nextTick(() => composeInput.value?.focus())
+    nextTick(() => composeRef.value?.focus())
   }
 }
 
-function formatTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString('pt-PT', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    })
-  } catch {
-    return iso
+// ── Anexo ──────────────────────────────────────────────────
+function openFilePicker() {
+  fileInputRef.value?.click()
+}
+
+function onFileSelected(ev: Event) {
+  const el = ev.target as HTMLInputElement
+  const file = el.files?.[0] ?? null
+  el.value = ''
+  if (!file) return
+  if (file.size > 25 * 1024 * 1024) {
+    sendError.value = 'Arquivo muito grande (máx. 25 MB).'
+    return
+  }
+  attachedFile.value = file
+}
+
+// ── Helpers ────────────────────────────────────────────────
+function scrollBottom() {
+  messagesEnd.value?.scrollIntoView({ behavior: 'smooth' })
+}
+
+function autoResize() {
+  const el = composeRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 180) + 'px'
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    send()
   }
 }
 
-onMounted(() => {
-  void loadConversations()
-})
+async function onLogout() {
+  await logout()
+  router.push('/login')
+}
+
+onMounted(() => { void loadConversations() })
 </script>
 
 <template>
-  <div class="chat-page">
-    <aside class="chat-sidebar sa-card sa-card--pad" aria-label="Conversas">
-      <RouterLink class="sa-page__back chat__back" to="/app">
-        <span aria-hidden="true">←</span> Área da app
-      </RouterLink>
+  <div class="chat-layout" :class="{ 'sidebar-closed': !sidebarOpen }">
 
-      <div class="chat-sidebar__head">
-        <h1 class="chat-sidebar__title">Chat</h1>
-        <button type="button" class="sa-btn sa-btn--primary chat-sidebar__new" @click="newConversation">
-          Nova conversa
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <button class="icon-btn" title="Fechar menu" @click="sidebarOpen = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <span class="sidebar-brand">Studies</span>
+        <button class="icon-btn" title="Nova conversa" @click="newConversation">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
         </button>
       </div>
 
-      <p v-if="listLoading" class="chat-muted">A carregar…</p>
-      <p v-else-if="listError" class="chat-err">{{ listError }}</p>
-      <p v-else-if="conversations.length === 0" class="chat-muted">Sem conversas. Cria uma nova.</p>
-      <ul v-else class="chat-conv-list">
-        <li
-          v-for="c in conversations"
-          :key="c.id"
-          class="chat-conv-item"
-          :class="{ 'chat-conv-item--active': selectedId === c.id }"
-          @click="selectConversation(c.id)"
-        >
-          <div class="chat-conv-item__main">
-            <span class="chat-conv-item__title">{{ c.title || `Conversa #${c.id}` }}</span>
-            <span class="chat-conv-item__meta">{{ c.message_count }} mensagens</span>
-          </div>
-          <button
-            type="button"
-            class="chat-conv-item__del"
-            title="Apagar conversa"
-            @click="removeConversation(c.id, $event)"
+      <nav class="conv-list-wrap">
+        <div v-if="listLoading" class="conv-skeleton">
+          <span class="skel"/><span class="skel skel--sm"/><span class="skel"/>
+        </div>
+        <p v-else-if="listError" class="conv-empty conv-empty--err">{{ listError }}</p>
+        <p v-else-if="conversations.length === 0" class="conv-empty">Nenhuma conversa ainda.</p>
+        <ul v-else class="conv-list">
+          <li
+            v-for="c in conversations"
+            :key="c.id"
+            class="conv-item"
+            :class="{ active: selectedId === c.id }"
+            @click="selectConversation(c.id)"
           >
-            ×
-          </button>
-        </li>
-      </ul>
+            <input
+              v-if="renamingId === c.id"
+              ref="renameInputRef"
+              v-model="renameValue"
+              class="rename-input"
+              @keydown="onRenameKeydown($event, c.id)"
+              @blur="confirmRename(c.id)"
+              @click.stop
+            />
+            <template v-else>
+              <span class="conv-title">{{ c.title || 'Nova conversa' }}</span>
+              <div class="conv-actions">
+                <button class="conv-btn" title="Renomear" @click="startRename(c, $event)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <button class="conv-btn conv-btn--del" title="Apagar" @click="removeConversation(c.id, $event)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                  </svg>
+                </button>
+              </div>
+            </template>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <button class="sidebar-nav-item" @click="router.push('/documents')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Meus PDFs
+        </button>
+        <button class="sidebar-user" @click="onLogout">
+          <div class="user-avatar">{{ user?.username?.[0]?.toUpperCase() ?? '?' }}</div>
+          <span class="user-name">{{ user?.username }}</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+          </svg>
+        </button>
+      </div>
     </aside>
 
-    <main class="chat-main sa-card sa-card--elevated">
-      <template v-if="selectedId === null">
-        <div class="chat-empty">
-          <p class="chat-empty__title">Escolhe ou cria uma conversa</p>
-          <p class="chat-muted">Usa a barra lateral para ver o histórico ou inicia uma nova conversa.</p>
-        </div>
-      </template>
-      <template v-else>
-        <div class="chat-main__header">
-          <h2 class="chat-main__h2">
-            {{ conversations.find((x) => x.id === selectedId)?.title || `Conversa #${selectedId}` }}
-          </h2>
-        </div>
+    <!-- ── Botão flutuante reabrir sidebar (desktop) ── -->
+    <Transition name="fade">
+      <button
+        v-if="!sidebarOpen"
+        class="sidebar-reopen"
+        title="Abrir menu"
+        @click="sidebarOpen = true"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+    </Transition>
 
-        <div class="chat-messages" role="log" aria-live="polite">
-          <p v-if="messagesLoading" class="chat-muted">A carregar mensagens…</p>
-          <template v-else>
-            <p v-if="messages.length === 0" class="chat-muted chat-messages__empty">
-              Ainda sem mensagens. Escreve abaixo e envia — a resposta usa os teus PDFs (RAG).
-            </p>
-            <div
-              v-for="m in messages"
-              :key="m.id"
-              class="chat-bubble"
-              :class="m.role === 'user' ? 'chat-bubble--user' : 'chat-bubble--assistant'"
-            >
-              <span class="chat-bubble__role">{{ m.role === 'user' ? 'Tu' : 'Assistente' }}</span>
-              <p class="chat-bubble__text">{{ m.content }}</p>
-              <time class="chat-bubble__time" :datetime="m.created_at">{{ formatTime(m.created_at) }}</time>
-              <ul v-if="m.role === 'assistant' && m.sources?.length" class="chat-sources">
-                <li v-for="(s, i) in m.sources" :key="i" class="chat-sources__item">
-                  <span class="chat-sources__meta">{{ s.original_name }} · chunk {{ s.chunk_index }}</span>
-                  <p class="chat-sources__ex">{{ s.excerpt }}</p>
-                </li>
-              </ul>
-            </div>
-            <div ref="messagesEnd" />
-          </template>
-        </div>
+    <!-- ── Área principal ── -->
+    <div class="main-area">
 
-        <div class="chat-compose">
-          <p v-if="sendError" class="chat-err" role="alert">{{ sendError }}</p>
-          <p class="chat-compose__hint">Enter envia · Shift+Enter nova linha</p>
-          <div class="chat-compose__row">
-            <textarea
-              ref="composeInput"
-              v-model="input"
-              class="chat-compose__input"
-              rows="2"
-              placeholder="Escreve a tua pergunta…"
-              :disabled="sendPending"
-              @keydown.enter.exact.prevent="send"
-            />
-            <button
-              type="button"
-              class="sa-btn sa-btn--primary chat-compose__send"
-              :disabled="!input.trim() || sendPending"
-              @click="send"
-            >
-              {{ sendPending ? '…' : 'Enviar' }}
-            </button>
+      <!-- Topbar (mobile) -->
+      <header class="topbar">
+        <button class="icon-btn" @click="sidebarOpen = !sidebarOpen">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <span class="topbar-title">{{ selectedConv?.title || 'Studies Assistant' }}</span>
+        <button class="icon-btn" @click="newConversation">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        </button>
+      </header>
+
+      <!-- Mensagens -->
+      <div class="messages-area">
+
+        <!-- Boas-vindas -->
+        <div v-if="selectedId === null" class="welcome">
+          <div class="welcome-icon">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
           </div>
+          <h1 class="welcome-title">Studies Assistant</h1>
+          <p class="welcome-sub">Seu assistente de estudos com IA. Faça perguntas e obtenha respostas baseadas nos seus próprios documentos.</p>
+
+          <div class="welcome-cards">
+            <div class="welcome-card">
+              <div class="wcard-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+              </div>
+              <h3>Envie seus PDFs</h3>
+              <p>Faça upload dos seus materiais em <strong>Meus PDFs</strong>. O conteúdo é indexado automaticamente.</p>
+            </div>
+            <div class="welcome-card">
+              <div class="wcard-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              </div>
+              <h3>Pergunte e explore</h3>
+              <p>Faça perguntas sobre o conteúdo. A IA busca respostas diretamente nos seus documentos.</p>
+            </div>
+            <div class="welcome-card">
+              <div class="wcard-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              </div>
+              <h3>Histórico organizado</h3>
+              <p>Todas as conversas ficam salvas na barra lateral e podem ser renomeadas a qualquer hora.</p>
+            </div>
+          </div>
+
+          <button class="btn-primary-cta" @click="newConversation">
+            Iniciar nova conversa
+          </button>
         </div>
-      </template>
-    </main>
+
+        <!-- Loading mensagens -->
+        <div v-else-if="messagesLoading" class="messages-loading">
+          <span class="typing-dot"/><span class="typing-dot"/><span class="typing-dot"/>
+        </div>
+
+        <!-- Lista de mensagens -->
+        <div v-else class="messages-list">
+          <p v-if="messages.length === 0" class="msgs-empty">
+            Envie uma mensagem para começar. As respostas são baseadas nos seus PDFs.
+          </p>
+
+          <div
+            v-for="m in messages"
+            :key="m.id"
+            class="msg-row"
+            :class="m.role"
+          >
+            <div v-if="m.role === 'assistant'" class="msg-avatar assistant-avatar">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 12l3 3 5-5" stroke="white" stroke-width="2" fill="none"/>
+              </svg>
+            </div>
+            <div class="msg-content">
+              <div class="msg-bubble">{{ m.content }}</div>
+              <div v-if="m.role === 'assistant' && m.sources?.length" class="sources-wrap">
+                <button class="sources-toggle" @click="showSources = showSources === m.id ? null : m.id">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16h16V8z"/>
+                  </svg>
+                  {{ m.sources.length }} fonte{{ m.sources.length > 1 ? 's' : '' }}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    :style="{ transform: showSources === m.id ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div v-if="showSources === m.id" class="sources-list">
+                  <div v-for="(s, i) in m.sources" :key="i" class="source-item">
+                    <div class="source-header">
+                      <span class="source-name">{{ s.original_name }}</span>
+                      <span class="source-chunk">chunk {{ s.chunk_index }}</span>
+                    </div>
+                    <p class="source-excerpt">{{ s.excerpt }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="m.role === 'user'" class="msg-avatar user-avatar-sm">
+              {{ user?.username?.[0]?.toUpperCase() ?? '?' }}
+            </div>
+          </div>
+
+          <!-- Digitando... -->
+          <div v-if="sendPending" class="msg-row assistant">
+            <div class="msg-avatar assistant-avatar">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="msg-content">
+              <div class="msg-bubble typing-bubble">
+                <span class="typing-dot"/><span class="typing-dot"/><span class="typing-dot"/>
+              </div>
+            </div>
+          </div>
+
+          <div ref="messagesEnd"/>
+        </div>
+      </div>
+
+      <!-- Compose -->
+      <div v-if="selectedId !== null" class="compose-area">
+        <p v-if="sendError" class="compose-error" role="alert">{{ sendError }}</p>
+
+        <!-- Arquivo anexado -->
+        <div v-if="attachedFile" class="attach-preview">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span>{{ attachedFile.name }}</span>
+          <button class="attach-remove" @click="attachedFile = null">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="compose-box">
+          <input ref="fileInputRef" type="file" accept=".pdf,.doc,.docx,.txt,.md" class="sr-only" @change="onFileSelected"/>
+
+          <button class="compose-icon-btn" title="Anexar arquivo" :disabled="sendPending" @click="openFilePicker">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+
+          <textarea
+            ref="composeRef"
+            v-model="input"
+            class="compose-input"
+            placeholder="Escreva sua mensagem..."
+            rows="1"
+            :disabled="sendPending"
+            @input="autoResize"
+            @keydown="onKeydown"
+          />
+
+          <button
+            class="compose-send"
+            :class="{ active: (input.trim() || attachedFile) && !sendPending }"
+            :disabled="(!input.trim() && !attachedFile) || sendPending"
+            title="Enviar"
+            @click="send"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="19" x2="12" y2="5"/>
+              <polyline points="5 12 12 5 19 12"/>
+            </svg>
+          </button>
+        </div>
+        <p class="compose-hint">Enter para enviar · Shift+Enter para nova linha</p>
+      </div>
+    </div>
+
+    <!-- Overlay mobile -->
+    <div v-if="sidebarOpen && isMobile" class="sidebar-overlay" @click="sidebarOpen = false"/>
   </div>
 </template>
 
+<script lang="ts">
+import { defineComponent } from 'vue'
+export default defineComponent({ name: 'ChatView' })
+const isMobile = typeof window !== 'undefined' && window.innerWidth < 700
+</script>
+
 <style scoped>
-.chat-page {
+/* ── Transição do botão reabrir ── */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; transform: scale(0.85); }
+
+/* ── Layout ── */
+.chat-layout {
   display: flex;
-  gap: 1rem;
-  max-width: 56rem;
-  margin: 0 auto;
-  padding: 0 clamp(0.75rem, 3vw, 1.25rem) 2.5rem;
-  min-height: calc(100vh - 4rem);
-  align-items: stretch;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  position: relative;
 }
 
-.chat__back {
-  margin-bottom: 1rem;
-  display: inline-block;
-}
-
-.chat-sidebar {
-  flex: 0 0 min(260px, 34vw);
-  display: flex;
-  flex-direction: column;
-  min-height: 18rem;
-  max-height: calc(100vh - 5rem);
-}
-
-.chat-sidebar__head {
-  margin-bottom: 0.75rem;
-}
-
-.chat-sidebar__title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin: 0 0 0.5rem;
-  color: var(--sa-text);
-}
-
-.chat-sidebar__new {
-  width: 100%;
-  font-size: 0.875rem;
-}
-
-.chat-conv-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  overflow-y: auto;
-  flex: 1;
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  height: 100vh;
+  overflow: hidden;
+  transition: width 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.2s, border-color 0.2s;
+  position: relative;
+  z-index: 20;
 }
 
-.chat-conv-item {
+.chat-layout.sidebar-closed .sidebar {
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+  border-right-color: transparent;
+}
+
+.sidebar-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.35rem;
-  padding: 0.5rem 0.55rem;
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid transparent;
-  cursor: pointer;
-  text-align: left;
+  padding: 0.75rem 0.75rem 0.5rem;
+  flex-shrink: 0;
 }
 
-.chat-conv-item:hover {
-  background: color-mix(in srgb, var(--sa-primary) 6%, transparent);
-}
-
-.chat-conv-item--active {
-  border-color: var(--sa-border);
-  background: var(--sa-primary-soft);
-}
-
-.chat-conv-item__main {
-  min-width: 0;
-  flex: 1;
-}
-
-.chat-conv-item__title {
-  display: block;
-  font-size: 0.85rem;
+.sidebar-brand {
+  font-size: 0.875rem;
   font-weight: 600;
-  color: var(--sa-text);
+  color: var(--text-2);
+  letter-spacing: 0.03em;
+}
+
+/* ── Botão reabrir sidebar ── */
+.sidebar-reopen {
+  position: fixed;
+  top: 0.875rem;
+  left: 0.875rem;
+  z-index: 30;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sidebar-reopen:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* ── Conversas ── */
+.conv-list-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.25rem 0.5rem;
+}
+
+.conv-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s;
+  min-width: 0;
+}
+
+.conv-item:hover { background: var(--bg-hover); }
+.conv-item.active { background: var(--bg-active); }
+
+.conv-title {
+  flex: 1;
+  font-size: 0.8375rem;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-conv-item__meta {
-  font-size: 0.72rem;
-  color: var(--sa-text-muted);
+.conv-item.active .conv-title { color: var(--text); }
+
+.conv-actions {
+  display: none;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
 }
 
-.chat-conv-item__del {
-  flex-shrink: 0;
+.conv-item:hover .conv-actions,
+.conv-item.active .conv-actions {
+  display: flex;
+}
+
+.conv-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
-  color: var(--sa-text-muted);
-  font-size: 1.25rem;
-  line-height: 1;
-  padding: 0 0.15rem;
+  color: var(--text-3);
+  border-radius: 4px;
   cursor: pointer;
-  border-radius: var(--sa-radius-sm);
+  transition: background 0.12s, color 0.12s;
 }
 
-.chat-conv-item__del:hover {
-  color: var(--sa-danger);
-  background: color-mix(in srgb, var(--sa-danger) 12%, transparent);
-}
+.conv-btn:hover { background: var(--bg-3); color: var(--text); }
+.conv-btn--del:hover { color: var(--danger); background: var(--danger-bg); }
 
-.chat-main {
+.rename-input {
   flex: 1;
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.8375rem;
+  padding: 0.15rem 0.4rem;
+  outline: none;
   min-width: 0;
+}
+
+/* Skeleton */
+.conv-skeleton { display: flex; flex-direction: column; gap: 6px; padding: 0.5rem; }
+.skel {
+  display: block;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.skel--sm { width: 60%; }
+@keyframes pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+
+.conv-empty { font-size: 0.8rem; color: var(--text-3); padding: 0.75rem; text-align: center; }
+.conv-empty--err { color: var(--danger); }
+
+/* ── Sidebar bottom ── */
+.sidebar-bottom {
+  padding: 0.5rem;
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 5rem);
+  gap: 2px;
+  flex-shrink: 0;
 }
 
-.chat-main__header {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--sa-border);
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 0.8375rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
 }
 
-.chat-main__h2 {
-  margin: 0;
-  font-size: 1rem;
+.sidebar-nav-item:hover { background: var(--bg-hover); color: var(--text); }
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.12s;
+}
+.sidebar-user:hover { background: var(--bg-hover); }
+
+.user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: var(--sa-text);
+  flex-shrink: 0;
+}
+
+.user-name {
+  flex: 1;
+  font-size: 0.8375rem;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-empty {
+/* ── Icon btn genérico ── */
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+/* ── Main ── */
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Topbar (mobile) ── */
+.topbar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.75rem;
+  height: var(--header-h);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.topbar-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+
+/* ── Messages area ── */
+.messages-area {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Boas-vindas ── */
+.welcome {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
+  padding: 2rem 1.5rem 3rem;
   text-align: center;
 }
 
-.chat-empty__title {
-  font-weight: 700;
-  color: var(--sa-text);
-  margin: 0 0 0.35rem;
-}
-
-.chat-muted {
-  color: var(--sa-text-muted);
-  font-size: 0.9rem;
-  margin: 0;
-}
-
-.chat-err {
-  color: var(--sa-danger);
-  font-size: 0.85rem;
-  margin: 0 0 0.5rem;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.75rem 1rem 1rem;
+.welcome-icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  margin-bottom: 1.25rem;
 }
 
-.chat-messages__empty {
-  margin: 0.5rem 0 0;
-  max-width: 28rem;
+.welcome-title {
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.55rem;
+}
+
+.welcome-sub {
+  font-size: 0.9375rem;
+  color: var(--text-2);
+  max-width: 30rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.welcome-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  max-width: 620px;
+  width: 100%;
+  margin-bottom: 2rem;
+}
+
+.welcome-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  text-align: left;
+  transition: border-color 0.15s;
+}
+
+.welcome-card:hover { border-color: var(--border-strong); }
+
+.wcard-icon { color: var(--accent); margin-bottom: 0.55rem; }
+
+.welcome-card h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.3rem;
+}
+
+.welcome-card p {
+  font-size: 0.8rem;
+  color: var(--text-2);
   line-height: 1.5;
 }
 
-.chat-bubble {
-  max-width: 92%;
-  padding: 0.65rem 0.85rem;
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--sa-border);
-}
+.welcome-card strong { color: var(--text); font-weight: 500; }
 
-.chat-bubble--user {
-  align-self: flex-end;
-  background: color-mix(in srgb, var(--sa-primary) 14%, var(--sa-surface));
-}
-
-.chat-bubble--assistant {
-  align-self: flex-start;
-  background: var(--sa-surface);
-}
-
-.chat-bubble__role {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--sa-text-muted);
-}
-
-.chat-bubble__text {
-  margin: 0.25rem 0 0.35rem;
+.btn-primary-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1.5rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
-  line-height: 1.55;
-  color: var(--sa-text);
-  white-space: pre-wrap;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
 }
 
-.chat-bubble__time {
-  font-size: 0.7rem;
-  color: var(--sa-text-muted);
-}
+.btn-primary-cta:hover { background: var(--accent-hover); }
 
-.chat-sources {
-  list-style: none;
-  padding: 0.5rem 0 0;
-  margin: 0.5rem 0 0;
-  border-top: 1px dashed var(--sa-border);
-}
-
-.chat-sources__item {
-  margin-bottom: 0.5rem;
-}
-
-.chat-sources__meta {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--sa-primary);
-}
-
-.chat-sources__ex {
-  margin: 0.2rem 0 0;
-  font-size: 0.75rem;
-  color: var(--sa-text-muted);
-  line-height: 1.4;
-}
-
-.chat-compose {
-  padding: 0.75rem 1rem 1rem;
-  border-top: 1px solid var(--sa-border);
-}
-
-.chat-compose__hint {
-  font-size: 0.72rem;
-  color: var(--sa-text-muted);
-  margin: 0 0 0.4rem;
-}
-
-.chat-compose__row {
+/* ── Loading ── */
+.messages-loading {
   display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
-}
-
-.chat-compose__input {
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   flex: 1;
-  resize: vertical;
-  min-height: 2.75rem;
-  max-height: 8rem;
-  padding: 0.55rem 0.65rem;
-  border-radius: var(--sa-radius-sm);
-  border: 1px solid var(--sa-border);
-  background: var(--sa-surface);
-  color: var(--sa-text);
-  font-size: 0.9rem;
-  font-family: inherit;
 }
 
-.chat-compose__send {
+/* ── Messages list ── */
+.messages-list {
+  max-width: 48rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.msgs-empty {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+/* ── Mensagens ── */
+.msg-row {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  align-items: flex-start;
+}
+
+.msg-row.user { flex-direction: row-reverse; }
+
+.msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.assistant-avatar { background: var(--accent); color: #fff; }
+
+.user-avatar-sm {
+  background: var(--bg-3);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.msg-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-width: calc(100% - 76px);
+}
+
+.msg-row.user .msg-content { align-items: flex-end; }
+
+.msg-bubble {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg-row.user .msg-bubble {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 14px 14px 4px 14px;
+  padding: 0.6rem 0.875rem;
+  display: inline-block;
+}
+
+.typing-bubble {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.6rem 0.875rem;
+}
+
+/* ── Fontes ── */
+.sources-wrap { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.sources-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sources-toggle:hover { background: var(--bg-3); color: var(--text-2); }
+
+.sources-list { display: flex; flex-direction: column; gap: 5px; }
+
+.source-item {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+}
+
+.source-header { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; }
+.source-name { font-size: 0.72rem; font-weight: 600; color: var(--accent); }
+.source-chunk { font-size: 0.68rem; color: var(--text-3); }
+.source-excerpt { font-size: 0.78rem; color: var(--text-2); line-height: 1.45; }
+
+/* ── Typing dots ── */
+.typing-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: blink 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+/* ── Compose ── */
+.compose-area {
+  padding: 0.6rem 1rem 0.9rem;
+  background: var(--bg);
   flex-shrink: 0;
 }
 
-@media (max-width: 720px) {
-  .chat-page {
-    flex-direction: column;
-    max-height: none;
+.compose-error {
+  font-size: 0.78rem;
+  color: var(--danger);
+  margin-bottom: 0.4rem;
+  max-width: 48rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 0.25rem;
+}
+
+.attach-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 48rem;
+  margin: 0 auto 0.4rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+
+.attach-preview svg { color: var(--accent); flex-shrink: 0; }
+.attach-preview span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.attach-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-radius: 3px;
+  padding: 2px;
+  transition: color 0.12s, background 0.12s;
+}
+.attach-remove:hover { color: var(--danger); background: var(--danger-bg); }
+
+.compose-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.3rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.4rem 0.4rem 0.4rem 0.6rem;
+  max-width: 48rem;
+  margin: 0 auto;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.compose-box:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.07);
+}
+
+.compose-icon-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  margin-bottom: 1px;
+}
+.compose-icon-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.compose-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.compose-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  resize: none;
+  max-height: 180px;
+  padding: 0.28rem 0;
+  overflow-y: auto;
+}
+.compose-input::placeholder { color: var(--text-3); }
+
+.compose-send {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg-3);
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-bottom: 1px;
+}
+.compose-send.active { background: var(--accent); color: #fff; }
+.compose-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.compose-hint {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  text-align: center;
+  margin-top: 0.35rem;
+  max-width: 48rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── Overlay mobile ── */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 10;
+}
+
+/* ── Responsivo ── */
+@media (max-width: 700px) {
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100vh;
+    z-index: 50;
+    width: var(--sidebar-w) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateX(0);
+    transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
+    border-right-color: var(--border) !important;
   }
 
-  .chat-sidebar {
-    flex: none;
-    max-height: 40vh;
+  .chat-layout.sidebar-closed .sidebar {
+    transform: translateX(-100%);
+    pointer-events: none !important;
   }
 
-  .chat-main {
-    max-height: none;
-    min-height: 50vh;
-  }
+  .topbar { display: flex; }
+  .sidebar-reopen { display: none !important; }
+
+  .welcome-cards { grid-template-columns: 1fr; }
+  .messages-list { padding: 1rem 0.75rem 0.5rem; }
+  .compose-area { padding: 0.5rem 0.75rem 0.75rem; }
+}
+
+@media (min-width: 701px) {
+  .topbar { display: none; }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  border: 0;
 }
 </style>
