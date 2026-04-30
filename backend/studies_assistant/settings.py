@@ -69,16 +69,68 @@ _rag_throttle_rate = os.environ.get('RAG_THROTTLE_RATE', '30/min').strip() or '3
 _chat_throttle_rate = os.environ.get('CHAT_THROTTLE_RATE', '60/min').strip() or '60/min'
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+# ---------------------------------------------------------------------------
+# CORRIGIDO Bug 2: SECRET_KEY via variável de ambiente, nunca hardcoded.
+#
+# Em desenvolvimento, defina no ficheiro .env:
+#   DJANGO_SECRET_KEY=qualquer-string-longa-e-aleatória
+#
+# Em produção, defina na variável de ambiente do servidor.
+# Para gerar uma chave segura: python -c "from django.core.management.utils
+#   import get_random_secret_key; print(get_random_secret_key())"
+# ---------------------------------------------------------------------------
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-qeu34(rkg9xx8-xbtn-f$_@yisw14u88k4nhc14f=vvmk0ptjv'
+if not SECRET_KEY:
+    if 'test' in sys.argv:
+        # Em testes, aceita uma chave padrão para não obrigar configuração extra
+        SECRET_KEY = 'test-insecure-key-only-for-automated-tests-do-not-use-in-production'
+    else:
+        raise ValueError(
+            'A variável de ambiente DJANGO_SECRET_KEY não está definida. '
+            'Defina-a no ficheiro .env ou nas variáveis de ambiente do servidor. '
+            'Para gerar uma chave segura execute: '
+            'python -c "from django.core.management.utils import get_random_secret_key; '
+            'print(get_random_secret_key())"'
+        )
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# ---------------------------------------------------------------------------
+# CORRIGIDO Bug 3: DEBUG via variável de ambiente. Por defeito False (seguro).
+#
+# Para desenvolvimento, defina no ficheiro .env:
+#   DJANGO_DEBUG=true
+#
+# NUNCA defina DJANGO_DEBUG=true num servidor de produção.
+# ---------------------------------------------------------------------------
+DEBUG = os.environ.get('DJANGO_DEBUG', 'false').strip().lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = []
+# ---------------------------------------------------------------------------
+# CORRIGIDO Bug 4: ALLOWED_HOSTS via variável de ambiente.
+#
+# Em desenvolvimento, defina no ficheiro .env:
+#   DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+#
+# Em produção, inclua o domínio real:
+#   DJANGO_ALLOWED_HOSTS=meusite.com,www.meusite.com
+#
+# Se DEBUG=True e ALLOWED_HOSTS não estiver definido, usa localhost por
+# conveniência de desenvolvimento (sem arriscar produção).
+# ---------------------------------------------------------------------------
+_raw_hosts = os.environ.get('DJANGO_ALLOWED_HOSTS', '').strip()
+
+if _raw_hosts:
+    ALLOWED_HOSTS = [h.strip() for h in _raw_hosts.split(',') if h.strip()]
+elif DEBUG:
+    # Conveniência apenas em modo de desenvolvimento local
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
+else:
+    # Em produção sem a variável definida, falha explicitamente em vez de
+    # deixar a lista vazia (que bloquearia todas as requisições) ou '*' (inseguro)
+    raise ValueError(
+        'A variável de ambiente DJANGO_ALLOWED_HOSTS não está definida. '
+        'Defina-a com os domínios permitidos, ex.: '
+        'DJANGO_ALLOWED_HOSTS=meusite.com,www.meusite.com'
+    )
 
 
 # Application definition
