@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/composables/useAuth'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 export interface ApiDocument {
   id: number
@@ -143,6 +144,9 @@ onMounted(() => {
           </svg>
           Materiais
         </button>
+        <div class="docs-theme">
+          <ThemeToggle />
+        </div>
       </div>
 
       <div class="docs-sidebar-bottom">
@@ -162,7 +166,7 @@ onMounted(() => {
 
         <header class="docs-header">
           <h1 class="docs-title">Meus PDFs</h1>
-          <p class="docs-sub">Envie documentos para usar no chat. Máx. 25 MB por arquivo.</p>
+          <p class="docs-sub">Envie seus materiais em PDF para o assistente responder com base neles. Limite: 25 MB.</p>
         </header>
 
         <!-- Upload -->
@@ -286,6 +290,9 @@ onMounted(() => {
 
 .docs-sidebar-top {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .back-btn {
@@ -310,6 +317,10 @@ onMounted(() => {
 .docs-sidebar-bottom {
   border-top: 1px solid var(--border);
   padding-top: 0.5rem;
+}
+
+.docs-theme {
+  padding: 0.35rem 0.45rem 0.45rem;
 }
 
 .sidebar-user {
@@ -369,14 +380,14 @@ onMounted(() => {
 }
 
 .docs-title {
-  font-size: 1.375rem;
-  font-weight: 600;
+  font-size: 1.45rem;
+  font-weight: 650;
   color: var(--text);
   margin-bottom: 0.25rem;
 }
 
 .docs-sub {
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   color: var(--text-2);
 }
 
@@ -533,7 +544,7 @@ onMounted(() => {
   }
 
   .docs-main {
-    padding: 1.25rem 1rem;
+    padding: 1.1rem 0.9rem;
   }
 }
 </style>

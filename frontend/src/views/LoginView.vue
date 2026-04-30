@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 const { login } = useAuth()
 const route = useRoute()
@@ -34,6 +35,9 @@ async function onSubmit() {
 <template>
   <div class="auth-page">
     <div class="auth-card">
+      <div class="auth-top">
+        <ThemeToggle />
+      </div>
 
       <div class="auth-logo">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -42,7 +46,7 @@ async function onSubmit() {
       </div>
 
       <h1 class="auth-title">Entrar</h1>
-      <p class="auth-sub">Continue seus estudos</p>
+      <p class="auth-sub">Bem-vindo de volta. Vamos estudar.</p>
 
       <form class="auth-form" @submit.prevent="onSubmit" novalidate>
         <div class="field">
@@ -53,7 +57,7 @@ async function onSubmit() {
             class="input"
             type="text"
             autocomplete="username"
-            placeholder="seu_usuário"
+            placeholder="Digite seu usuário"
             autofocus
           />
         </div>
@@ -92,13 +96,12 @@ async function onSubmit() {
         <div v-if="error" class="alert alert-error">{{ error }}</div>
 
         <button type="submit" class="submit-btn" :disabled="pending">
-          {{ pending ? 'Entrando...' : 'Entrar' }}
+          {{ pending ? 'Entrando...' : 'Continuar' }}
         </button>
       </form>
 
       <p class="auth-footer">
-        Não tem conta?
-        <RouterLink to="/register">Criar conta</RouterLink>
+        Não tem conta? <RouterLink to="/register">Criar agora</RouterLink>
       </p>
     </div>
   </div>
@@ -116,17 +119,29 @@ async function onSubmit() {
 
 .auth-card {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  box-shadow: var(--shadow);
+  padding: 1.15rem 1.15rem 1.25rem;
+}
+
+.auth-top {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
 }
 
 .auth-logo {
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  background: var(--bg-3);
+  background: var(--bg);
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -136,14 +151,14 @@ async function onSubmit() {
 }
 
 .auth-title {
-  font-size: 1.375rem;
-  font-weight: 600;
+  font-size: 1.45rem;
+  font-weight: 650;
   color: var(--text);
   margin-bottom: 0.25rem;
 }
 
 .auth-sub {
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   color: var(--text-2);
   margin-bottom: 2rem;
 }

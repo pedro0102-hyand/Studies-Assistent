@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/composables/useAuth'
 import { renderMarkdownToSafeHtml } from '@/lib/markdown'
 import html2pdf from 'html2pdf.js'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 type MaterialKind = 'summary' | 'exercise_list' | 'roadmap'
 
@@ -170,6 +171,9 @@ onMounted(() => {
           </svg>
           Meus PDFs
         </button>
+        <div class="mat-theme">
+          <ThemeToggle />
+        </div>
       </div>
 
       <div class="mat-sidebar-bottom">
@@ -190,7 +194,7 @@ onMounted(() => {
           <div class="mat-title-row">
             <div>
               <h1 class="mat-title">Materiais</h1>
-              <p class="mat-sub">Gere resumos, listas de exercícios e roadmaps usando o conteúdo dos seus PDFs (RAG).</p>
+              <p class="mat-sub">Gere resumos, exercícios e roadmaps com base nos seus PDFs — pronto para exportar em PDF.</p>
             </div>
             <div class="mat-actions">
               <button class="btn btn-secondary" :disabled="generatePending" @click="generate">
@@ -224,7 +228,7 @@ onMounted(() => {
 
             <div class="field">
               <label>Tema / foco (opcional)</label>
-              <input v-model="topic" class="input" placeholder="Ex.: Derivadas e aplicações" />
+              <input v-model="topic" class="input" placeholder="Ex.: Derivadas e aplicações · Seções 1–3" />
             </div>
 
             <div class="field">
@@ -345,6 +349,10 @@ onMounted(() => {
 .back-btn:hover { background: var(--bg-hover); color: var(--text); }
 
 .mat-sidebar-bottom { border-top: 1px solid var(--border); padding-top: 0.5rem; }
+
+.mat-theme {
+  padding: 0.35rem 0.45rem 0.45rem;
+}
 .sidebar-user {
   display: flex; align-items: center; gap: 0.6rem;
   padding: 0.55rem 0.75rem;

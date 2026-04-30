@@ -3,6 +3,7 @@ import { nextTick, onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
 import { useAuth } from '@/composables/useAuth'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 export interface ApiConversation {
   id: number
@@ -360,6 +361,9 @@ onMounted(() => { void loadConversations() })
           </svg>
           Materiais
         </button>
+        <div class="sidebar-theme">
+          <ThemeToggle />
+        </div>
         <button class="sidebar-user" @click="onLogout">
           <div class="user-avatar">{{ user?.username?.[0]?.toUpperCase() ?? '?' }}</div>
           <span class="user-name">{{ user?.username }}</span>
@@ -769,6 +773,10 @@ const isMobile = typeof window !== 'undefined' && window.innerWidth < 700
   flex-shrink: 0;
 }
 
+.sidebar-theme {
+  padding: 0.35rem 0.45rem 0.45rem;
+}
+
 .sidebar-nav-item {
   display: flex;
   align-items: center;
@@ -1050,6 +1058,10 @@ const isMobile = typeof window !== 'undefined' && window.innerWidth < 700
   word-break: break-word;
 }
 
+.msg-row.assistant .msg-bubble {
+  color: var(--text);
+}
+
 .msg-row.user .msg-bubble {
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -1120,6 +1132,7 @@ const isMobile = typeof window !== 'undefined' && window.innerWidth < 700
   padding: 0.6rem 1rem 0.9rem;
   background: var(--bg);
   flex-shrink: 0;
+  border-top: 1px solid var(--border);
 }
 
 .compose-error {
@@ -1177,7 +1190,7 @@ const isMobile = typeof window !== 'undefined' && window.innerWidth < 700
 
 .compose-box:focus-within {
   border-color: var(--border-strong);
-  box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.07);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .compose-icon-btn {
