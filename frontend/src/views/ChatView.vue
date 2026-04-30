@@ -153,11 +153,13 @@ async function confirmRename(id: number) {
     } else {
       // Fallback local caso endpoint PATCH não exista
       const idx = conversations.value.findIndex((c) => c.id === id)
-      if (idx !== -1) conversations.value[idx].title = title
+      const conv = idx !== -1 ? conversations.value[idx] : undefined
+      if (conv) conv.title = title
     }
   } catch {
     const idx = conversations.value.findIndex((c) => c.id === id)
-    if (idx !== -1) conversations.value[idx].title = title
+    const conv = idx !== -1 ? conversations.value[idx] : undefined
+    if (conv) conv.title = title
   }
 }
 
@@ -349,6 +351,14 @@ onMounted(() => { void loadConversations() })
             <polyline points="14 2 14 8 20 8"/>
           </svg>
           Meus PDFs
+        </button>
+        <button class="sidebar-nav-item" @click="router.push('/materials')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            <path d="M8 7h9M8 11h9M8 15h7"/>
+          </svg>
+          Materiais
         </button>
         <button class="sidebar-user" @click="onLogout">
           <div class="user-avatar">{{ user?.username?.[0]?.toUpperCase() ?? '?' }}</div>

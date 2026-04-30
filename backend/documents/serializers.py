@@ -147,3 +147,55 @@ class RagAskResponseSerializer(serializers.Serializer):
 
     answer = serializers.CharField()
     sources = RagSourceSerializer(many=True, required=False)
+
+
+# --- Geração de materiais (resumo / exercícios / roadmap) ---
+
+
+class RagGenerateRequestSerializer(serializers.Serializer):
+    """
+    POST /api/rag/generate/ — gera um documento de estudo com base nos PDFs do utilizador.
+
+    - kind: tipo do documento a gerar.
+    - title: opcional; título exibido no documento.
+    - topic: opcional; tema/pergunta/assunto.
+    - instructions: opcional; instruções adicionais.
+    - document_ids: opcional; restringe a recuperação a estes documentos do utilizador.
+    """
+
+    kind = serializers.ChoiceField(
+        choices=[
+            ('summary', 'Resumo'),
+            ('exercise_list', 'Lista de exercícios'),
+            ('roadmap', 'Roadmap'),
+        ]
+    )
+    title = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=160,
+    )
+    topic = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=getattr(settings, 'RAG_MAX_QUESTION_LENGTH', 4000),
+    )
+    instructions = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=4000,
+    )
+    document_ids = RagAskRequestSerializer().fields['document_ids']
+
+    def validate_document_ids(self, value):
+        return RagAskRequestSerializer().validate_document_ids(value)
+
+
+class RagGenerateResponseSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    title = serializers.CharField()
+    markdown = serializers.CharField()
+    sources = RagSourceSerializer(many=True, required=False)

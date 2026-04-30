@@ -22,4 +22,9 @@ urlpatterns = [
         views.RagAskView.as_view(),
         name='rag_ask',
     ),
+    path(
+        'rag/generate/',
+        views.RagGenerateView.as_view(),
+        name='rag_generate',
+    ),
 ]

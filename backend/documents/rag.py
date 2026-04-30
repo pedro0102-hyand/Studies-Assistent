@@ -193,3 +193,120 @@ def run_rag_for_user(
     context, sources = build_context_from_chunks(chunks)
     answer = generate_rag_answer(context, question)
     return {'answer': answer, 'sources': sources}
+
+
+_GEN_KIND_LABELS: dict[str, str] = {
+    'summary': 'Resumo',
+    'exercise_list': 'Lista de exercícios',
+    'roadmap': 'Roadmap',
+}
+
+
+def _build_generate_prompt(
+    kind: str, *, title: str, topic: str, instructions: str
+) -> tuple[str, str]:
+    """
+    Devolve (system_prompt, question) para o pipeline RAG.
+    O output deve ser Markdown bem estruturado e pronto para renderização.
+    """
+    kind_label = _GEN_KIND_LABELS.get(kind, kind)
+    t = (title or '').strip()
+    tp = (topic or '').strip()
+    extra = (instructions or '').strip()
+
+    header = f'Tipo: {kind_label}'
+    if t:
+        header += f'\nTítulo: {t}'
+    if tp:
+        header += f'\nTema: {tp}'
+    if extra:
+        header += f'\nInstruções adicionais: {extra}'
+
+    system = (
+        'Tu és um assistente de estudos. Responde APENAS com base no contexto fornecido (trechos dos PDFs). '
+        'Se o contexto não for suficiente, escreve uma secção "Lacunas no material" com o que falta e perguntas '
+        'objetivas para o utilizador.\n\n'
+        'Formato obrigatório: devolve somente Markdown. Usa títulos, listas, tabelas simples e blocos quando fizer sentido. '
+        'Não inventes referências, autores, datas ou definições que não estejam no contexto.'
+    )
+
+    if kind == 'summary':
+        question = (
+            f'{header}\n\n'
+            'Gera um resumo de estudo bonito e organizado, com:\n'
+            '- visão geral em 5–8 bullets\n'
+            '- conceitos-chave (definições curtas)\n'
+            '- relações/fluxo (se houver)\n'
+            '- exemplos (se existirem nos trechos)\n'
+            '- "Checklist de revisão" (5–10 itens)\n'
+        )
+    elif kind == 'exercise_list':
+        question = (
+            f'{header}\n\n'
+            'Gera uma lista de exercícios progressiva baseada no material, com:\n'
+            '- aquecimento (3–5 questões)\n'
+            '- nível intermédio (5–8)\n'
+            '- avançado/desafio (2–4)\n'
+            '- uma secção "gabarito/guia" com pistas curtas (não soluções completas) quando possível\n'
+            'Os exercícios devem referir-se explicitamente a conceitos presentes no contexto.'
+        )
+    elif kind == 'roadmap':
+        question = (
+            f'{header}\n\n'
+            'Gera um roadmap de estudo inteligente e prático baseado no material, com:\n'
+            '- pré-requisitos\n'
+            '- trilha em etapas (do básico ao avançado), com objetivos e critérios de domínio\n'
+            '- tarefas/atividades sugeridas por etapa\n'
+            '- pontos de verificação (autoavaliação)\n'
+            'Não incluas recursos externos; usa só o que estiver no contexto.'
+        )
+    else:
+        question = f'{header}\n\nGera um documento de estudo bem estruturado e útil.'
+
+    return system, question
+
+
+def run_rag_generate_for_user(
+    *,
+    user_id: int,
+    kind: str,
+    title: str = '',
+    topic: str = '',
+    instructions: str = '',
+    document_ids: list[int] | None,
+) -> dict[str, Any]:
+    """
+    Geração de materiais: retrieval via Chroma + LLM, devolvendo Markdown e sources.
+    """
+    from .chroma_index import search_similar_chunks
+
+    sys_prompt, question = _build_generate_prompt(
+        kind,
+        title=title,
+        topic=topic,
+        instructions=instructions,
+    )
+
+    top_k = max(int(getattr(settings, 'RAG_TOP_K', 5)), 5)
+    gen_top_k = int(getattr(settings, 'RAG_GENERATE_TOP_K', top_k * 3))
+    # Se o utilizador forneceu um tema, dá-lhe peso como "query"
+    embed_text = (topic or '').strip() or question
+    embedding = embed_question(embed_text)
+
+    chunks = search_similar_chunks(
+        embedding,
+        user_id=user_id,
+        top_k=gen_top_k,
+        document_ids=document_ids,
+    )
+    context, sources = build_context_from_chunks(
+        chunks,
+        max_chars=int(getattr(settings, 'RAG_MAX_CONTEXT_CHARS', 12000)) * 2,
+    )
+    markdown = generate_rag_answer(context, question, system_prompt=sys_prompt)
+    return {
+        'kind': kind,
+        'title': (title or '').strip() or _GEN_KIND_LABELS.get(kind, kind),
+        'markdown': markdown,
+        'sources': sources,
+    }

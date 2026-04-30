@@ -36,6 +36,12 @@ const router = createRouter({
       component: () => import('@/views/DocumentsView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/materials',
+      name: 'materials',
+      component: () => import('@/views/StudyMaterialsView.vue'),
+      meta: { requiresAuth: true },
+    },
     // Redireciona rotas antigas
     { path: '/app', redirect: '/chat' },
     { path: '/ask', redirect: '/chat' },

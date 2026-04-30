@@ -10,11 +10,12 @@ from .extraction import extract_and_save_document
 from .models import Document
 from .ollama_chat import OllamaChatError
 from .ollama_embed import OllamaEmbedError
-from .rag import run_rag_for_user
+from .rag import run_rag_for_user, run_rag_generate_for_user
 from .serializers import (
     DocumentDetailSerializer,
     DocumentUploadSerializer,
     RagAskRequestSerializer,
+    RagGenerateRequestSerializer,
 )
 
 # Apagar o documento
@@ -95,6 +96,57 @@ class RagAskView(APIView):
             payload = run_rag_for_user(
                 user_id=request.user.pk,
                 question=question,
+                document_ids=document_ids,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except OllamaEmbedError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except OllamaChatError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class RagGenerateView(APIView):
+    """POST /api/rag/generate/ — gera materiais (Markdown) baseados no RAG."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'rag'
+
+    def post(self, request):
+        serializer = RagGenerateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        kind = serializer.validated_data['kind']
+        title = serializer.validated_data.get('title') or ''
+        topic = serializer.validated_data.get('topic') or ''
+        instructions = serializer.validated_data.get('instructions') or ''
+        document_ids = serializer.validated_data.get('document_ids')
+
+        if document_ids is not None:
+            found = set(
+                Document.objects.filter(
+                    user=request.user, pk__in=document_ids
+                ).values_list('pk', flat=True)
+            )
+            if set(document_ids) != found:
+                return Response(
+                    {
+                        'detail': 'Um ou mais document_ids são inválidos ou não pertencem ao utilizador.',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            payload = run_rag_generate_for_user(
+                user_id=request.user.pk,
+                kind=kind,
+                title=title,
+                topic=topic,
+                instructions=instructions,
                 document_ids=document_ids,
             )
         except ValueError as exc:
