@@ -8,7 +8,8 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 export default defineConfig({
   plugins: [
     vue(),
-    vueDevTools(),
+    // Evita o botão/overlay do Vue Devtools na UI
+    vueDevTools({ appendTo: 'none' }),
   ],
   resolve: {
     alias: {
