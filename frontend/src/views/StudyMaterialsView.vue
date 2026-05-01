@@ -7,6 +7,7 @@ import { useAuth } from '@/composables/useAuth'
 import { renderMarkdownToSafeHtml } from '@/lib/markdown'
 import html2pdf from 'html2pdf.js'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 type MaterialKind = 'summary' | 'exercise_list' | 'roadmap'
 
@@ -49,6 +50,7 @@ const selectedDocIds = ref<number[]>([])
 const generatePending = ref(false)
 const generateError = ref<string | null>(null)
 const result = ref<GenerateResponse | null>(null)
+const exportConfirmOpen = ref(false)
 
 const previewHtml = computed(() => renderMarkdownToSafeHtml(result.value?.markdown ?? ''))
 const canExportPdf = computed(() => !!result.value?.markdown && !generatePending.value)
@@ -129,6 +131,11 @@ async function generate() {
 
 async function exportPdf() {
   if (!result.value) return
+  exportConfirmOpen.value = true
+}
+
+async function confirmExportPdf() {
+  if (!result.value) return
   const el = document.getElementById('pdf-root')
   if (!el) return
 
@@ -161,6 +168,15 @@ onMounted(() => {
 
 <template>
   <div class="mat-layout">
+    <ConfirmDialog
+      v-model:open="exportConfirmOpen"
+      title="Baixar PDF?"
+      description="Vamos gerar e descarregar um PDF com o material atual."
+      confirmText="Baixar"
+      cancelText="Cancelar"
+      variant="primary"
+      @confirm="confirmExportPdf"
+    />
     <!-- Sidebar -->
     <aside class="mat-sidebar">
       <div class="mat-sidebar-top">

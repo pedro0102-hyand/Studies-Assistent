@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api'
 import { fetchAllPaginatedResults } from '@/lib/paginatedList'
 import { useAuth } from '@/composables/useAuth'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 export interface ApiConversation {
   id: number
@@ -57,6 +58,9 @@ const attachedFile = ref<File | null>(null)
 const renamingId = ref<number | null>(null)
 const renameValue = ref('')
 const renameInputRef = ref<HTMLInputElement | null>(null)
+
+const deleteConfirmOpen = ref(false)
+const deleteTargetId = ref<number | null>(null)
 
 const selectedConv = computed(() =>
   conversations.value.find((c) => c.id === selectedId.value)
@@ -122,7 +126,15 @@ async function newConversation() {
 
 async function removeConversation(id: number, ev: Event) {
   ev.stopPropagation()
-  if (!confirm('Apagar esta conversa?')) return
+  deleteTargetId.value = id
+  deleteConfirmOpen.value = true
+}
+
+async function confirmDeleteConversation() {
+  const id = deleteTargetId.value
+  deleteConfirmOpen.value = false
+  deleteTargetId.value = null
+  if (!id) return
   try {
     await apiFetch(`/api/chat/conversations/${id}/`, { method: 'DELETE' })
     if (selectedId.value === id) {
@@ -322,6 +334,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="chat-layout" :class="{ 'sidebar-closed': !sidebarOpen }">
+    <ConfirmDialog
+      v-model:open="deleteConfirmOpen"
+      title="Apagar conversa?"
+      description="Esta ação remove a conversa e todas as mensagens. Não é possível desfazer."
+      confirmText="Apagar"
+      cancelText="Cancelar"
+      variant="danger"
+      @confirm="confirmDeleteConversation"
+    />
 
     <!-- ── Sidebar ── -->
     <aside class="sidebar">

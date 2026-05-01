@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api'
 import { fetchAllPaginatedResults } from '@/lib/paginatedList'
 import { useAuth } from '@/composables/useAuth'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 export interface ApiDocument {
   id: number
@@ -33,6 +34,8 @@ const uploadPending = ref(false)
 const uploadMessage = ref<string | null>(null)
 const uploadError = ref<string | null>(null)
 const deletePending = ref<number | null>(null)
+const deleteConfirmOpen = ref(false)
+const deleteTarget = ref<ApiDocument | null>(null)
 
 async function loadDocuments() {
   listError.value = null
@@ -106,7 +109,15 @@ async function onFileChange(ev: Event) {
 }
 
 async function removeDoc(doc: ApiDocument) {
-  if (!confirm(`Apagar "${doc.original_name}"?`)) return
+  deleteTarget.value = doc
+  deleteConfirmOpen.value = true
+}
+
+async function confirmDeleteDoc() {
+  const doc = deleteTarget.value
+  deleteConfirmOpen.value = false
+  deleteTarget.value = null
+  if (!doc) return
   deletePending.value = doc.id
   uploadError.value = null
   try {
@@ -151,6 +162,15 @@ onMounted(() => {
 
 <template>
   <div class="docs-layout">
+    <ConfirmDialog
+      v-model:open="deleteConfirmOpen"
+      title="Apagar PDF?"
+      :description="deleteTarget ? `Isto remove o ficheiro e o índice do documento “${deleteTarget.original_name}”. Não é possível desfazer.` : 'Isto remove o ficheiro e o índice do documento. Não é possível desfazer.'"
+      confirmText="Apagar"
+      cancelText="Cancelar"
+      variant="danger"
+      @confirm="confirmDeleteDoc"
+    />
 
     <!-- Sidebar -->
     <aside class="docs-sidebar">
