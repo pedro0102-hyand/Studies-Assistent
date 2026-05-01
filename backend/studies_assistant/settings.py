@@ -353,10 +353,21 @@ elif _jwt_secure_raw in ('0', 'false', 'no'):
 else:
     JWT_COOKIE_SECURE = None
 
-# CORS — frontend Vite (mini-etapa 1.5)
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-]
+# CORS — origens do browser permitidas (obrigatório com credenciais; não uses '*').
+# Desenvolvimento: deixa `DJANGO_CORS_ALLOWED_ORIGINS` vazio e usam-se os defaults do Vite.
+# Produção: define no .env ou no servidor, por exemplo:
+#   DJANGO_CORS_ALLOWED_ORIGINS=https://app.exemplo.com,https://www.exemplo.com
+_cors_env = os.environ.get('DJANGO_CORS_ALLOWED_ORIGINS', '').strip()
+if _cors_env:
+    CORS_ALLOWED_ORIGINS = []
+    for _part in _cors_env.split(','):
+        _o = _part.strip().rstrip('/')
+        if _o:
+            CORS_ALLOWED_ORIGINS.append(_o)
+else:
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ]
 # Cookies de sessão na API precisam de credenciais CORS explícitas
 CORS_ALLOW_CREDENTIALS = True
