@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
 import { API_BASE } from '@/config'
 import { apiFetch } from '@/lib/api'
 
@@ -11,8 +11,8 @@ export interface MeUser {
 const user = ref<MeUser | null>(null)
 /** true depois de tentar restaurar sessão ao arrancar */
 const sessionReady = ref(false)
-
-let sessionBoot: Promise<void> | null = null
+/** Promessa de bootstrap em curso (estado partilhado à escala da SPA; shallowRef evita reatividade profunda). */
+const sessionBootPromise = shallowRef<Promise<void> | null>(null)
 
 function formatApiErrors(data: Record<string, unknown>): string {
   if (typeof data.detail === 'string') return data.detail
@@ -41,22 +41,21 @@ export function useAuth() {
    */
   async function initSession(): Promise<void> {
     if (sessionReady.value) return
-    if (sessionBoot) {
-      await sessionBoot
+    const existing = sessionBootPromise.value
+    if (existing) {
+      await existing
       return
     }
-    sessionBoot = (async () => {
+    const boot = (async () => {
       try {
         await fetchMe()
       } finally {
         sessionReady.value = true
+        sessionBootPromise.value = null
       }
     })()
-    try {
-      await sessionBoot
-    } finally {
-      sessionBoot = null
-    }
+    sessionBootPromise.value = boot
+    await boot
   }
 
   async function login(username: string, password: string): Promise<{ ok: boolean; error?: string }> {
@@ -106,6 +105,8 @@ export function useAuth() {
       body: JSON.stringify({}),
     })
     user.value = null
+    sessionReady.value = false
+    sessionBootPromise.value = null
   }
 
   return {

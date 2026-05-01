@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
+import { fetchAllPaginatedResults } from '@/lib/paginatedList'
 import { useAuth } from '@/composables/useAuth'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 
@@ -36,9 +37,7 @@ async function loadDocuments() {
   listError.value = null
   listLoading.value = true
   try {
-    const res = await apiFetch('/api/documents/')
-    if (!res.ok) throw new Error(`Erro ${res.status}`)
-    documents.value = (await res.json()) as ApiDocument[]
+    documents.value = await fetchAllPaginatedResults<ApiDocument>('/api/documents/', 50)
   } catch (e) {
     listError.value = e instanceof Error ? e.message : 'Erro ao carregar'
     documents.value = []

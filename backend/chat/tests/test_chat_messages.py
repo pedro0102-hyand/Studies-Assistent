@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from chat.models import Conversation, Message
+from documents.ollama_chat import OllamaChatError
 
 User = get_user_model()
 
@@ -49,10 +50,27 @@ class ChatSendMessageTests(APITestCase):
         )
         self.assertEqual(roles, ['user', 'assistant'])
 
+    @patch('chat.views.run_rag_for_user')
+    def test_post_rag_falha_mantem_mensagem_utilizador(self, mock_rag) -> None:
+        mock_rag.side_effect = OllamaChatError('modelo indisponível')
+        r = self.client.post(
+            f'/api/chat/conversations/{self.conv.pk}/messages/',
+            {'content': 'Pergunta que fica no histórico'},
+            format='json',
+        )
+        self.assertEqual(r.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertIn('user_message', r.data)
+        self.assertEqual(r.data['user_message']['role'], 'user')
+        self.assertEqual(r.data['user_message']['content'], 'Pergunta que fica no histórico')
+        msgs = list(Message.objects.filter(conversation=self.conv))
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0].role, Message.Role.USER)
+
     def test_get_mensagens_vazio(self) -> None:
         r = self.client.get(f'/api/chat/conversations/{self.conv.pk}/messages/')
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(r.data, [])
+        self.assertEqual(r.data['results'], [])
+        self.assertEqual(r.data['count'], 0)
 
     def test_post_sem_conteudo_400(self) -> None:
         r = self.client.post(

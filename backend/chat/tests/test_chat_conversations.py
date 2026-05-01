@@ -17,7 +17,8 @@ class ChatConversationsApiTests(APITestCase):
     def test_lista_vazia(self) -> None:
         r = self.client.get('/api/chat/conversations/')
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(r.data, [])
+        self.assertEqual(r.data['results'], [])
+        self.assertEqual(r.data['count'], 0)
 
     def test_criar_e_listar(self) -> None:
         r = self.client.post(
@@ -31,8 +32,8 @@ class ChatConversationsApiTests(APITestCase):
 
         r2 = self.client.get('/api/chat/conversations/')
         self.assertEqual(r2.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(r2.data), 1)
-        self.assertEqual(r2.data[0]['id'], rid)
+        self.assertEqual(len(r2.data['results']), 1)
+        self.assertEqual(r2.data['results'][0]['id'], rid)
 
     def test_apagar_conversa(self) -> None:
         c = Conversation.objects.create(user=self.user, title='x')

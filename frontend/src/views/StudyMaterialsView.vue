@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
+import { fetchAllPaginatedResults } from '@/lib/paginatedList'
 import { useAuth } from '@/composables/useAuth'
 import { renderMarkdownToSafeHtml } from '@/lib/markdown'
 import html2pdf from 'html2pdf.js'
@@ -82,9 +83,7 @@ async function loadDocs() {
   docsLoading.value = true
   docsError.value = null
   try {
-    const res = await apiFetch('/api/documents/')
-    if (!res.ok) throw new Error(`Erro ${res.status}`)
-    docs.value = (await res.json()) as ApiDocument[]
+    docs.value = await fetchAllPaginatedResults<ApiDocument>('/api/documents/', 50)
   } catch (e) {
     docs.value = []
     docsError.value = e instanceof Error ? e.message : 'Erro ao carregar'

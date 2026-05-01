@@ -2,6 +2,7 @@
 import { nextTick, onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
+import { fetchAllPaginatedResults } from '@/lib/paginatedList'
 import { useAuth } from '@/composables/useAuth'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 
@@ -59,9 +60,10 @@ async function loadConversations() {
   listLoading.value = true
   listError.value = null
   try {
-    const res = await apiFetch('/api/chat/conversations/')
-    if (!res.ok) throw new Error(`Erro ${res.status}`)
-    conversations.value = (await res.json()) as ApiConversation[]
+    conversations.value = await fetchAllPaginatedResults<ApiConversation>(
+      '/api/chat/conversations/',
+      50,
+    )
   } catch (e) {
     listError.value = e instanceof Error ? e.message : 'Erro ao carregar'
     conversations.value = []
@@ -75,9 +77,10 @@ async function loadMessages(id: number) {
   sendError.value = null
   messages.value = []
   try {
-    const res = await apiFetch(`/api/chat/conversations/${id}/messages/`)
-    if (!res.ok) throw new Error(`Erro ${res.status}`)
-    messages.value = (await res.json()) as ApiChatMessage[]
+    messages.value = await fetchAllPaginatedResults<ApiChatMessage>(
+      `/api/chat/conversations/${id}/messages/`,
+      100,
+    )
     await nextTick()
     scrollBottom()
   } finally {
@@ -218,7 +221,22 @@ async function send() {
       user_message?: ApiChatMessage
       assistant_message?: ApiChatMessage
     }
-    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`)
+    if (!res.ok) {
+      const msg =
+        typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`
+      sendError.value = msg
+      if (data.user_message) {
+        messages.value = messages.value
+          .filter((m) => m.id !== userMsg.id)
+          .concat([data.user_message])
+      } else {
+        messages.value = messages.value.filter((m) => m.id !== userMsg.id)
+      }
+      await loadConversations()
+      await nextTick()
+      scrollBottom()
+      return
+    }
 
     if (data.user_message && data.assistant_message) {
       messages.value = messages.value

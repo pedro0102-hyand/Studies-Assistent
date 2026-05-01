@@ -5,6 +5,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+
+from core.pagination import DocumentListPagination
+
 from .chroma_index import delete_chroma_for_document
 from .extraction import extract_and_save_document
 from .models import Document
@@ -38,10 +41,12 @@ class DocumentListView(APIView):
 
     def get(self, request):
         qs = Document.objects.filter(user=request.user)
+        paginator = DocumentListPagination()
+        page = paginator.paginate_queryset(qs, request)
         serializer = DocumentDetailSerializer(
-            qs, many=True, context={'request': request}
+            page, many=True, context={'request': request}
         )
-        return Response(serializer.data)
+        return paginator.get_paginated_response(serializer.data)
 
 # Upload de documento
 class DocumentUploadView(APIView):
