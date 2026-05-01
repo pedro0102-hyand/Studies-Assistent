@@ -1,12 +1,6 @@
 import { ref } from 'vue'
 import { API_BASE } from '@/config'
-import { apiFetch, refreshAccessToken } from '@/lib/api'
-import {
-  clearStoredTokens,
-  getStoredAccess,
-  getStoredRefresh,
-  setStoredTokens,
-} from '@/lib/authStorage'
+import { apiFetch } from '@/lib/api'
 
 export interface MeUser {
   id: number
@@ -42,7 +36,7 @@ export function useAuth() {
   }
 
   /**
-   * Se existir refresh sem access, renova; depois pede /api/auth/me/.
+   * Restaura sessão via cookies; se access expirou, apiFetch renova com refresh.
    * Idempotente e seguro com navegações em paralelo (router).
    */
   async function initSession(): Promise<void> {
@@ -53,12 +47,6 @@ export function useAuth() {
     }
     sessionBoot = (async () => {
       try {
-        if (!getStoredAccess() && getStoredRefresh()) {
-          await refreshAccessToken()
-        }
-        if (!getStoredAccess()) {
-          return
-        }
         await fetchMe()
       } finally {
         sessionReady.value = true
@@ -75,14 +63,13 @@ export function useAuth() {
     const res = await fetch(`${API_BASE}/api/auth/login/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ username, password }),
     })
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as { detail?: string }
       return { ok: false, error: err.detail ?? `Credenciais inválidas (${res.status})` }
     }
-    const data = (await res.json()) as { access: string; refresh: string }
-    setStoredTokens(data.access, data.refresh)
     await fetchMe()
     return { ok: true }
   }
@@ -96,6 +83,7 @@ export function useAuth() {
     const res = await fetch(`${API_BASE}/api/auth/register/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         username,
         email: email.trim() || '',
@@ -111,15 +99,12 @@ export function useAuth() {
   }
 
   async function logout(): Promise<void> {
-    const refresh = getStoredRefresh()
-    if (refresh) {
-      await fetch(`${API_BASE}/api/auth/logout/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh }),
-      })
-    }
-    clearStoredTokens()
+    await fetch(`${API_BASE}/api/auth/logout/`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
     user.value = null
   }
 

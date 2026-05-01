@@ -294,7 +294,7 @@ REST_FRAMEWORK = {
     ],
     'EXCEPTION_HANDLER': 'core.exception_handler.exception_handler',
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'core.authentication.JWTCookieAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
@@ -320,11 +320,27 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
-    # Logout: POST /api/auth/logout/ com body {"refresh":"..."} — invalida o refresh no servidor
+    # Logout: POST /api/auth/logout/ — invalida refresh (cookie ou body) e apaga cookies
 }
+
+# JWT em cookies HttpOnly (SPA); nomes evitam colisão com outras apps no mesmo domínio
+JWT_ACCESS_COOKIE_NAME = 'studies_access'
+JWT_REFRESH_COOKIE_NAME = 'studies_refresh'
+JWT_AUTH_COOKIE_PATH = '/api'
+# None = automático: Lax+Secure=False em DEBUG; None+Secure=True em produção (cross-site HTTPS)
+JWT_COOKIE_SAMESITE = os.environ.get('JWT_COOKIE_SAMESITE', '').strip() or None
+_jwt_secure_raw = os.environ.get('JWT_COOKIE_SECURE', '').strip().lower()
+if _jwt_secure_raw in ('1', 'true', 'yes'):
+    JWT_COOKIE_SECURE = True
+elif _jwt_secure_raw in ('0', 'false', 'no'):
+    JWT_COOKIE_SECURE = False
+else:
+    JWT_COOKIE_SECURE = None
 
 # CORS — frontend Vite (mini-etapa 1.5)
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ]
+# Cookies de sessão na API precisam de credenciais CORS explícitas
+CORS_ALLOW_CREDENTIALS = True
