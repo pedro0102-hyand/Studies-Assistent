@@ -20,6 +20,8 @@ from .serializers import (
     RagGenerateRequestSerializer,
 )
 from .tasks import process_document_extraction
+from django.conf import settings
+import threading
 
 
 class DocumentDetailView(APIView):
@@ -70,7 +72,22 @@ class DocumentUploadView(APIView):
 
         serializer.is_valid(raise_exception=True)
         document = serializer.save()
-        process_document_extraction.delay(document.pk)
+        # Enfileira para Celery; em DEBUG sem Redis, pode falhar — faz fallback sem bloquear request.
+        try:
+            process_document_extraction.delay(document.pk)
+        except Exception:
+            if getattr(settings, 'DEBUG', False):
+                threading.Thread(
+                    target=process_document_extraction,
+                    args=(document.pk,),
+                    daemon=True,
+                ).start()
+            else:
+                # Em produção, expõe falha de infraestrutura em vez de fingir sucesso.
+                return Response(
+                    {'detail': 'Fila de processamento indisponível (Celery/Redis).'},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
         document.refresh_from_db()
         out = DocumentDetailSerializer(document, context={'request': request})
         return Response(out.data, status=status.HTTP_201_CREATED)

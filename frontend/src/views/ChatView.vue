@@ -208,8 +208,9 @@ async function send() {
     let res: Response
     if (sentFile) {
       const form = new FormData()
+      // Se o utilizador não escreveu pergunta, não enviar placeholder como `content`.
+      // O backend aceita `file` sem `content` e usa o PDF anexado como base.
       if (text) form.append('content', text)
-      else form.append('content', `[Arquivo: ${sentFile.name}]`)
       form.append('file', sentFile)
       res = await apiFetch(`/api/chat/conversations/${id}/messages/`, {
         method: 'POST',

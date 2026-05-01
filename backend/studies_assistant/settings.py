@@ -54,6 +54,12 @@ RAG_TOP_K = max(1, min(50, int(os.environ.get('RAG_TOP_K', '5'))))
 RAG_MAX_CONTEXT_CHARS = max(500, int(os.environ.get('RAG_MAX_CONTEXT_CHARS', '12000')))
 RAG_MAX_QUESTION_LENGTH = max(10, int(os.environ.get('RAG_MAX_QUESTION_LENGTH', '4000')))
 RAG_MAX_FILTER_DOCUMENTS = max(1, min(100, int(os.environ.get('RAG_MAX_FILTER_DOCUMENTS', '20'))))
+RAG_DIVERSIFY_RESULTS = os.environ.get('RAG_DIVERSIFY_RESULTS', 'true').strip().lower() in (
+    '1',
+    'true',
+    'yes',
+)
+RAG_MAX_CHUNKS_PER_DOCUMENT = max(1, min(10, int(os.environ.get('RAG_MAX_CHUNKS_PER_DOCUMENT', '2'))))
 
 # Etapa 5.5 — mensagem de sistema do RAG (opcional via .env)
 _rag_sys = os.environ.get('RAG_SYSTEM_PROMPT', '').strip()
@@ -382,10 +388,15 @@ else:
 # Cookies de sessão na API precisam de credenciais CORS explícitas
 CORS_ALLOW_CREDENTIALS = True
 
-# Celery — processamento assíncrono de PDFs (upload). Em testes: execução síncrona (eager).
-CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0').strip()
+# Celery — processamento assíncrono de PDFs (upload).
+# Em testes: execução síncrona (eager).
+# Em desenvolvimento (DEBUG): se não definires CELERY_BROKER_URL, corre em eager para não exigir Redis.
+_celery_broker_env = os.environ.get('CELERY_BROKER_URL', '').strip()
+CELERY_BROKER_URL = _celery_broker_env or 'redis://127.0.0.1:6379/0'
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', '').strip() or CELERY_BROKER_URL
-CELERY_TASK_ALWAYS_EAGER = 'test' in sys.argv or os.environ.get(
-    'CELERY_TASK_ALWAYS_EAGER', ''
-).strip().lower() in ('1', 'true', 'yes')
+CELERY_TASK_ALWAYS_EAGER = (
+    ('test' in sys.argv)
+    or (DEBUG and not _celery_broker_env)
+    or os.environ.get('CELERY_TASK_ALWAYS_EAGER', '').strip().lower() in ('1', 'true', 'yes')
+)
 CELERY_TASK_EAGER_PROPAGATES = True

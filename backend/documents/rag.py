@@ -124,7 +124,7 @@ def generate_rag_answer(
     )
     ctx = (context or '').strip()
     user_block = (
-        'Utiliza apenas o seguinte contexto extraído dos documentos do utilizador.\n\n'
+        'Utiliza apenas o seguinte contexto fornecido (trechos dos PDFs do utilizador e anexos enviados no chat).\n\n'
         f'---\n{ctx if ctx else "(Nenhum trecho relevante foi encontrado.)"}\n---\n\n'
         f'Pergunta: {q}'
     )
@@ -189,25 +189,54 @@ def run_rag_for_user(
 
     top_k = int(getattr(settings, 'RAG_TOP_K', 5))
     embedding = embed_question(question)
+
+    # Quando o utilizador não restringe `document_ids`, é comum o top_k vir todo do mesmo PDF.
+    # Pedimos mais candidatos e depois diversificamos por documento.
+    diversified = (
+        document_ids is None
+        and bool(getattr(settings, 'RAG_DIVERSIFY_RESULTS', True))
+    )
+    request_k = min(50, max(1, top_k * (5 if diversified else 1)))
+
     chunks = search_similar_chunks(
         embedding,
         user_id=user_id,
-        top_k=top_k,
+        top_k=request_k,
         document_ids=document_ids,
     )
+
+    if diversified and chunks:
+        per_doc = int(getattr(settings, 'RAG_MAX_CHUNKS_PER_DOCUMENT', 2))
+        per_doc = max(1, min(10, per_doc))
+        counts: dict[int, int] = {}
+        diversified_chunks: list[dict[str, Any]] = []
+        for item in chunks:
+            meta = item.get('metadata') or {}
+            try:
+                doc_id = int(meta.get('document_id') or 0)
+            except (TypeError, ValueError):
+                doc_id = 0
+            if doc_id > 0:
+                used = counts.get(doc_id, 0)
+                if used >= per_doc:
+                    continue
+                counts[doc_id] = used + 1
+            diversified_chunks.append(item)
+            if len(diversified_chunks) >= top_k:
+                break
+        chunks = diversified_chunks
+
     context, sources = build_context_from_chunks(chunks)
 
     att = (attachment_context or '').strip()
     if att:
         max_ctx = max(500, int(getattr(settings, 'RAG_MAX_CONTEXT_CHARS', 12000)))
-        block = (
-            '\n\n--- Texto extraído do PDF anexado à mensagem ---\n'
-            f'{att}'
-        )
+        block = '\n\n--- Texto extraído do PDF anexado à mensagem ---\n' + f'{att}'
         if len(context) + len(block) > max_ctx:
             room = max(0, max_ctx - len(block) - 50)
             context = (context[:room] + '…') if len(context) > room else context
-        context = (context + block)[:max_ctx]
+        # Dá prioridade ao anexo: coloca-o no início do contexto.
+        context = (block + '\n\n' + (context or '').strip())[:max_ctx]
         fname = (attachment_filename or 'anexo.pdf')[:200]
         excerpt = att[:400] + ('…' if len(att) > 400 else '')
         sources.append(
