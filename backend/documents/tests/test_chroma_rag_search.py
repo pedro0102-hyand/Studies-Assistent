@@ -9,8 +9,7 @@ from documents import chroma_index as chroma_index_mod
 class SearchSimilarChunksTests(SimpleTestCase):
 
     def tearDown(self) -> None:
-        chroma_index_mod._client = None
-        chroma_index_mod._collection = None
+        chroma_index_mod.reset_chroma_singleton_for_tests()
 
     def test_user_id_invalido(self) -> None:
 

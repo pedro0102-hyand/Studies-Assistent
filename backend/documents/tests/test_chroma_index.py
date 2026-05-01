@@ -7,8 +7,7 @@ from documents import chroma_index as chroma_index_mod
 
 class DeleteChromaTests(SimpleTestCase):
     def tearDown(self) -> None:
-        chroma_index_mod._client = None
-        chroma_index_mod._collection = None
+        chroma_index_mod.reset_chroma_singleton_for_tests()
 
     @patch.object(chroma_index_mod, '_get_collection')
     def test_delete_usa_where_document_id(self, mock_get) -> None:

@@ -1,10 +1,15 @@
 """
 Etapa 4.5 — persistência de embeddings no ChromaDB (vetores + texto + metadados).
+
+O cliente Chroma é mantido por processo (lazy + thread-safe). Cada worker do
+Gunicorn é um processo separado com a sua própria instância; não há estado
+partilhado entre workers — o armazenamento em disco é a fonte de verdade.
 """
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+import threading
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from django.conf import settings
 
@@ -13,14 +18,26 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_client = None
-_collection = None
+_chroma_lock = threading.Lock()
+_chroma: '_ChromaBundle | None' = None
+
+
+class _ChromaBundle(NamedTuple):
+    client: Any
+    collection: Any
+
+
+def reset_chroma_singleton_for_tests() -> None:
+    """Limpa a cache do processo (apenas testes)."""
+    global _chroma
+    with _chroma_lock:
+        _chroma = None
 
 
 def _get_collection():
-    global _client, _collection
-    if _collection is not None:
-        return _collection
+    global _chroma
+    if _chroma is not None:
+        return _chroma.collection
 
     import chromadb
 
@@ -30,12 +47,16 @@ def _get_collection():
         raise RuntimeError('CHROMA_PERSIST_PATH não definido.')
 
     path = str(path)
-    _client = chromadb.PersistentClient(path=path)
-    _collection = _client.get_or_create_collection(
-        name=name,
-        metadata={'app': 'studies_assistant'},
-    )
-    return _collection
+    with _chroma_lock:
+        if _chroma is not None:
+            return _chroma.collection
+        client = chromadb.PersistentClient(path=path)
+        collection = client.get_or_create_collection(
+            name=name,
+            metadata={'app': 'studies_assistant'},
+        )
+        _chroma = _ChromaBundle(client=client, collection=collection)
+        return _chroma.collection
 
 
 def delete_chroma_for_document(document_id: int) -> None:

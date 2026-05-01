@@ -97,31 +97,28 @@ class ConversationMessagesView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        # Ollama/embeddings fora da transação: se o commit falhar, não revertemos inferência externa.
+        try:
+            payload = run_rag_for_user(
+                user_id=request.user.pk,
+                question=content,
+                document_ids=document_ids,
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except OllamaEmbedError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except OllamaChatError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         with transaction.atomic():
             user_msg = Message.objects.create(
                 conversation=conv,
                 role=Message.Role.USER,
                 content=content,
             )
-            try:
-                payload = run_rag_for_user(
-                    user_id=request.user.pk,
-                    question=content,
-                    document_ids=document_ids,
-                )
-            except ValueError as exc:
-                user_msg.delete()
-                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-            except OllamaEmbedError as exc:
-                user_msg.delete()
-                return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-            except OllamaChatError as exc:
-                user_msg.delete()
-                return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-            except RuntimeError as exc:
-                user_msg.delete()
-                return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
             assistant_msg = Message.objects.create(
                 conversation=conv,
                 role=Message.Role.ASSISTANT,
