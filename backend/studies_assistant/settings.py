@@ -67,6 +67,16 @@ RAG_SYSTEM_PROMPT = _rag_sys or (
 _rag_throttle_rate = os.environ.get('RAG_THROTTLE_RATE', '30/min').strip() or '30/min'
 # Etapa 6 — chat (listar conversas / enviar mensagens)
 _chat_throttle_rate = os.environ.get('CHAT_THROTTLE_RATE', '60/min').strip() or '60/min'
+# Autenticação — força bruta / spam de contas (por IP)
+_auth_login_throttle_rate = (
+    os.environ.get('AUTH_LOGIN_THROTTLE_RATE', '5/min').strip() or '5/min'
+) 
+_auth_register_throttle_rate = (
+    os.environ.get('AUTH_REGISTER_THROTTLE_RATE', '3/min').strip() or '3/min'
+)
+_auth_refresh_throttle_rate = (
+    os.environ.get('AUTH_REFRESH_THROTTLE_RATE', '60/min').strip() or '60/min'
+)
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +312,9 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'rag': _rag_throttle_rate,
         'chat': _chat_throttle_rate,
+        'auth_login': _auth_login_throttle_rate,
+        'auth_register': _auth_register_throttle_rate,
+        'auth_refresh': _auth_refresh_throttle_rate,
     },
 }
 
@@ -312,6 +325,9 @@ if 'test' in sys.argv:
             **REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],
             'rag': '100000/min',
             'chat': '100000/min',
+            'auth_login': '100000/min',
+            'auth_register': '100000/min',
+            'auth_refresh': '100000/min',
         },
     }
 

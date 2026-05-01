@@ -1,9 +1,10 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from .serializers import RegisterSerializer, UserMeSerializer
+from .throttles import AuthRegisterThrottle
 
 
 @api_view(['GET']) # Endpoint para verificar a saúde do backend
@@ -16,6 +17,7 @@ def health(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRegisterThrottle])
 def register(request):
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)

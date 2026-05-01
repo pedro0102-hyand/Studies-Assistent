@@ -29,6 +29,8 @@ def _translate_detail(detail: Any) -> Any:
     Mantém estrutura (str/list/dict) quando possível.
     """
     if isinstance(detail, str):
+        if 'throttled' in detail.lower():
+            return 'Demasiados pedidos neste endpoint. Aguarda um pouco antes de tentar de novo.'
         return _DETAIL_MAP.get(detail, detail)
     if isinstance(detail, list):
         return [_translate_detail(x) for x in detail]

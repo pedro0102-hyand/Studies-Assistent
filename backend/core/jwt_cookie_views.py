@@ -17,6 +17,8 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 
+from .throttles import AuthLoginThrottle, AuthRefreshThrottle
+
 
 def _cookie_common():
     """Secure obrigatório com SameSite=None; em DEBUG local (HTTP) usa Lax + Secure=False."""
@@ -68,6 +70,8 @@ def _clear_auth_cookies(response) -> None:
 class CookieTokenObtainPairView(TokenObtainPairView):
     """POST username/password — define cookies; corpo sem tokens."""
 
+    throttle_classes = [AuthLoginThrottle]
+
     def post(self, request, *args, **kwargs):
 
         serializer = TokenObtainPairSerializer(data=request.data)
@@ -83,8 +87,10 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 class CookieTokenRefreshView(TokenRefreshView):
     """POST — refresh a partir do cookie ou do body (compat.); novo access em cookie."""
 
+    throttle_classes = [AuthRefreshThrottle]
+
     def post(self, request, *args, **kwargs):
-        
+
         refresh_name = getattr(settings, 'JWT_REFRESH_COOKIE_NAME', 'studies_refresh')
         refresh = request.data.get('refresh') or request.COOKIES.get(refresh_name)
         if not refresh:
