@@ -9,7 +9,6 @@ from rest_framework.views import APIView
 from core.pagination import DocumentListPagination
 
 from .chroma_index import delete_chroma_for_document
-from .extraction import extract_and_save_document
 from .models import Document
 from .ollama_chat import OllamaChatError
 from .ollama_embed import OllamaEmbedError
@@ -20,11 +19,19 @@ from .serializers import (
     RagAskRequestSerializer,
     RagGenerateRequestSerializer,
 )
+from .tasks import process_document_extraction
 
-# Apagar o documento
-class DocumentDeleteView(APIView):
-    
+
+class DocumentDetailView(APIView):
+    """GET um documento (polling de estado) ou DELETE."""
+
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        doc = get_object_or_404(Document, pk=pk, user=request.user)
+        return Response(
+            DocumentDetailSerializer(doc, context={'request': request}).data,
+        )
 
     def delete(self, request, pk):
         doc = get_object_or_404(Document, pk=pk, user=request.user)
@@ -63,10 +70,9 @@ class DocumentUploadView(APIView):
 
         serializer.is_valid(raise_exception=True)
         document = serializer.save()
-        extract_and_save_document(document)
+        process_document_extraction.delay(document.pk)
         document.refresh_from_db()
         out = DocumentDetailSerializer(document, context={'request': request})
-        # Devolver o documento atualizado
         return Response(out.data, status=status.HTTP_201_CREATED)
 
 

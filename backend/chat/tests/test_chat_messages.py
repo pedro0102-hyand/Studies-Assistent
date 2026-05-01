@@ -43,6 +43,8 @@ class ChatSendMessageTests(APITestCase):
             user_id=self.user.pk,
             question='Qual é o tema?',
             document_ids=None,
+            attachment_context=None,
+            attachment_filename=None,
         )
         self.assertEqual(Message.objects.filter(conversation=self.conv).count(), 2)
         roles = list(

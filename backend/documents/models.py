@@ -34,6 +34,17 @@ class Document(models.Model):
     # Etapa 4.5 — ChromaDB
     chroma_indexed_at = models.DateTimeField(null=True, blank=True)
     chroma_error = models.CharField(max_length=500, blank=True, default='')
+    extraction_status = models.CharField(
+        max_length=16,
+        choices=[
+            ('pending', 'Em fila'),
+            ('processing', 'A processar'),
+            ('done', 'Concluído'),
+            ('failed', 'Falhou'),
+        ],
+        default='pending',
+        db_index=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True) # Data de criação
     updated_at = models.DateTimeField(auto_now=True) # Data de atualização
 

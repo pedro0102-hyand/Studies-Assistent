@@ -175,10 +175,15 @@ def run_rag_for_user(
     user_id: int,
     question: str,
     document_ids: list[int] | None,
+    attachment_context: str | None = None,
+    attachment_filename: str | None = None,
 ) -> dict[str, Any]:
     """
     Etapa 5.6 — pipeline completo: embedding → Chroma (sempre com filtro user_id) →
     contexto → resposta LLM. ``document_ids`` já deve estar validado em relação ao utilizador.
+
+    ``attachment_context``: texto extraído de um PDF anexado à mensagem; junta-se ao contexto
+    enviado ao LLM (não entra no embedding da pergunta).
     """
     from .chroma_index import search_similar_chunks
 
@@ -191,6 +196,29 @@ def run_rag_for_user(
         document_ids=document_ids,
     )
     context, sources = build_context_from_chunks(chunks)
+
+    att = (attachment_context or '').strip()
+    if att:
+        max_ctx = max(500, int(getattr(settings, 'RAG_MAX_CONTEXT_CHARS', 12000)))
+        block = (
+            '\n\n--- Texto extraído do PDF anexado à mensagem ---\n'
+            f'{att}'
+        )
+        if len(context) + len(block) > max_ctx:
+            room = max(0, max_ctx - len(block) - 50)
+            context = (context[:room] + '…') if len(context) > room else context
+        context = (context + block)[:max_ctx]
+        fname = (attachment_filename or 'anexo.pdf')[:200]
+        excerpt = att[:400] + ('…' if len(att) > 400 else '')
+        sources.append(
+            {
+                'document_id': 0,
+                'chunk_index': 0,
+                'original_name': fname,
+                'excerpt': excerpt,
+            }
+        )
+
     answer = generate_rag_answer(context, question)
     return {'answer': answer, 'sources': sources}
 

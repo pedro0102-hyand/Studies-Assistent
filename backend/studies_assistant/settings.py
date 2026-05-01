@@ -77,6 +77,16 @@ _auth_register_throttle_rate = (
 _auth_refresh_throttle_rate = (
     os.environ.get('AUTH_REFRESH_THROTTLE_RATE', '60/min').strip() or '60/min'
 )
+# Máximo de conversas por utilizador (0 = sem limite)
+CHAT_MAX_CONVERSATIONS_PER_USER = max(
+    0,
+    int(os.environ.get('CHAT_MAX_CONVERSATIONS_PER_USER', '500')),
+)
+# Texto extraído do PDF anexado no chat enviado ao LLM (caracteres)
+RAG_MAX_CHAT_ATTACHMENT_CONTEXT_CHARS = max(
+    500,
+    int(os.environ.get('RAG_MAX_CHAT_ATTACHMENT_CONTEXT_CHARS', '8000')),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -371,3 +381,11 @@ else:
     ]
 # Cookies de sessão na API precisam de credenciais CORS explícitas
 CORS_ALLOW_CREDENTIALS = True
+
+# Celery — processamento assíncrono de PDFs (upload). Em testes: execução síncrona (eager).
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0').strip()
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', '').strip() or CELERY_BROKER_URL
+CELERY_TASK_ALWAYS_EAGER = 'test' in sys.argv or os.environ.get(
+    'CELERY_TASK_ALWAYS_EAGER', ''
+).strip().lower() in ('1', 'true', 'yes')
+CELERY_TASK_EAGER_PROPAGATES = True

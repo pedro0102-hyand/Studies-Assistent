@@ -34,11 +34,13 @@ class MessageSerializer(serializers.ModelSerializer):
 
 
 class ChatSendSerializer(serializers.Serializer):
-    """Corpo POST …/messages/ — igual ao RAG quanto a limites."""
+    """POST …/messages/ — JSON ou multipart (campo `file` PDF opcional)."""
 
     content = serializers.CharField(
         trim_whitespace=True,
-        min_length=1,
+        allow_blank=True,
+        required=False,
+        default='',
         max_length=getattr(settings, 'RAG_MAX_QUESTION_LENGTH', 4000),
     )
     document_ids = serializers.ListField(
@@ -60,3 +62,16 @@ class ChatSendSerializer(serializers.Serializer):
                 seen.add(x)
                 out.append(x)
         return out
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        content = (attrs.get('content') or '').strip()
+        uploaded = None
+        if request is not None:
+            uploaded = request.FILES.get('file')
+        if not content and not uploaded:
+            raise serializers.ValidationError(
+                'Envia texto na mensagem ou anexa um ficheiro PDF.'
+            )
+        attrs['content'] = content
+        return attrs

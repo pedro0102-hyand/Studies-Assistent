@@ -17,6 +17,7 @@ export interface ApiDocument {
   chroma_indexed_at?: string | null
   chroma_error?: string
   extraction_error?: string
+  extraction_status?: 'pending' | 'processing' | 'done' | 'failed'
   created_at: string
   updated_at: string
 }
@@ -52,6 +53,22 @@ function pickFile() {
   fileInput.value?.click()
 }
 
+async function pollDocumentProcessing(id: number): Promise<ApiDocument | null> {
+  const intervalMs = 1500
+  for (let i = 0; i < 200; i++) {
+    const res = await apiFetch(`/api/documents/${id}/`)
+    if (!res.ok) return null
+    const doc = (await res.json()) as ApiDocument
+    if (doc.extraction_status === 'failed') {
+      if (doc.extraction_error) uploadError.value = doc.extraction_error
+      return doc
+    }
+    if (doc.extraction_status === 'done') return doc
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  return null
+}
+
 async function onFileChange(ev: Event) {
   const input = ev.target as HTMLInputElement
   const file = input.files?.[0]
@@ -74,7 +91,12 @@ async function onFileChange(ev: Event) {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
       throw new Error(typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`)
     }
-    uploadMessage.value = `"${file.name}" enviado com sucesso.`
+    const created = (await res.json()) as ApiDocument
+    uploadMessage.value = `"${file.name}" recebido. A processar no servidor…`
+    await pollDocumentProcessing(created.id)
+    uploadMessage.value = uploadError.value
+      ? `"${file.name}" — falhou a extração.`
+      : `"${file.name}" — processamento concluído (ver estado abaixo).`
     await loadDocuments()
   } catch (e) {
     uploadError.value = e instanceof Error ? e.message : 'Falha no envio'
@@ -106,11 +128,15 @@ function formatDate(iso: string) {
 }
 
 function statusInfo(doc: ApiDocument) {
-  if (doc.extraction_error) return { type: 'error', text: 'Erro na extração' }
+  const st = doc.extraction_status
+  if (st === 'failed' || doc.extraction_error)
+    return { type: 'error', text: 'Erro na extração' }
+  if (st === 'pending' || st === 'processing')
+    return { type: 'idle', text: 'A processar no servidor…' }
   if (doc.chroma_indexed_at) return { type: 'ok', text: 'Indexado' }
   if (doc.chroma_error) return { type: 'warn', text: 'Erro no índice' }
   if (doc.embedded_chunk_count) return { type: 'warn', text: 'Aguardando indexação' }
-  return { type: 'idle', text: 'Processando...' }
+  return { type: 'idle', text: 'Em fila…' }
 }
 
 async function onLogout() {
@@ -187,8 +213,11 @@ onMounted(() => {
               <line x1="12" y1="12" x2="12" y2="21"/>
               <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
             </svg>
-            {{ uploadPending ? 'Enviando...' : 'Enviar PDF' }}
+            {{ uploadPending ? 'A enviar / processar…' : 'Enviar PDF' }}
           </button>
+          <p v-if="uploadPending" class="upload-progress-hint">
+            O ficheiro foi aceite; a extração e a indexação correm em segundo plano (podes aguardar ou voltar mais tarde).
+          </p>
 
           <div v-if="uploadMessage" class="feedback-ok">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -401,6 +430,14 @@ onMounted(() => {
 
 .upload-btn {
   gap: 0.5rem;
+}
+
+.upload-progress-hint {
+  font-size: 0.8rem;
+  color: var(--text-3);
+  margin: 0.35rem 0 0;
+  max-width: 36rem;
+  line-height: 1.45;
 }
 
 .feedback-ok {

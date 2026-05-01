@@ -25,6 +25,7 @@ class DocumentDetailSerializer(serializers.ModelSerializer):
             'chroma_indexed_at',
             'chroma_error',
             'extraction_error',
+            'extraction_status',
             'created_at',
             'updated_at',
         )

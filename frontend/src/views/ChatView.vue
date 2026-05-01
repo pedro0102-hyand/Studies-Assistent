@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, computed } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
 import { fetchAllPaginatedResults } from '@/lib/paginatedList'
@@ -43,6 +43,13 @@ const messagesEnd = ref<HTMLElement | null>(null)
 const composeRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const sidebarOpen = ref(true)
+/** Largura < 700px — atualizado com matchMedia (evita constante fixa fora do setup). */
+const isMobile = ref(false)
+let isMobileMql: MediaQueryList | null = null
+function syncIsMobile() {
+  if (typeof window === 'undefined') return
+  isMobile.value = window.matchMedia('(max-width: 700px)').matches
+}
 const showSources = ref<number | null>(null)
 const attachedFile = ref<File | null>(null)
 
@@ -298,7 +305,18 @@ async function onLogout() {
   router.push('/login')
 }
 
-onMounted(() => { void loadConversations() })
+onMounted(() => {
+  syncIsMobile()
+  if (typeof window !== 'undefined') {
+    isMobileMql = window.matchMedia('(max-width: 700px)')
+    isMobileMql.addEventListener('change', syncIsMobile)
+  }
+  void loadConversations()
+})
+
+onBeforeUnmount(() => {
+  isMobileMql?.removeEventListener('change', syncIsMobile)
+})
 </script>
 
 <template>
@@ -604,7 +622,6 @@ onMounted(() => { void loadConversations() })
 <script lang="ts">
 import { defineComponent } from 'vue'
 export default defineComponent({ name: 'ChatView' })
-const isMobile = typeof window !== 'undefined' && window.innerWidth < 700
 </script>
 
 <style scoped>

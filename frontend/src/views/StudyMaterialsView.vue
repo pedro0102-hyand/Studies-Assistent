@@ -17,6 +17,7 @@ interface ApiDocument {
   chroma_indexed_at?: string | null
   chroma_error?: string
   extraction_error?: string
+  extraction_status?: 'pending' | 'processing' | 'done' | 'failed'
 }
 
 interface GenerateResponse {
@@ -55,7 +56,13 @@ const canExportPdf = computed(() => !!result.value?.markdown && !generatePending
 const visibleDocs = computed(() => {
   const base = docs.value
   if (!onlyIndexed.value) return base
-  return base.filter((d) => !!d.chroma_indexed_at && !d.extraction_error && !d.chroma_error)
+  return base.filter(
+    (d) =>
+      d.extraction_status === 'done' &&
+      !!d.chroma_indexed_at &&
+      !d.extraction_error &&
+      !d.chroma_error,
+  )
 })
 
 function toggleDoc(id: number) {

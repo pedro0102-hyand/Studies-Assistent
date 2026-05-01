@@ -1,5 +1,6 @@
 """Etapa 6.5 — API de conversas (listar, criar, apagar, isolamento por utilizador)."""
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -51,3 +52,10 @@ class ChatConversationsApiTests(APITestCase):
         c = Conversation.objects.create(user=other, title='privada')
         r = self.client.get(f'/api/chat/conversations/{c.pk}/messages/')
         self.assertEqual(r.status_code, status.HTTP_404_NOT_FOUND)
+
+    @override_settings(CHAT_MAX_CONVERSATIONS_PER_USER=2)
+    def test_limite_conversas_403(self) -> None:
+        Conversation.objects.create(user=self.user, title='a')
+        Conversation.objects.create(user=self.user, title='b')
+        r = self.client.post('/api/chat/conversations/', {'title': 'c'}, format='json')
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)

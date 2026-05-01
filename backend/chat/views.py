@@ -1,7 +1,9 @@
+from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -15,6 +17,7 @@ from documents.ollama_embed import OllamaEmbedError
 from documents.rag import run_rag_for_user
 
 from .models import Conversation, Message
+from .pdf_attachment import ChatAttachmentError, extract_text_from_uploaded_pdf, truncate_for_rag
 from .serializers import (
     ChatSendSerializer,
     ConversationCreateSerializer,
@@ -36,6 +39,12 @@ class ConversationListCreateView(APIView):
         return paginator.get_paginated_response(ser.data)
 
     def post(self, request):
+        limit = int(getattr(settings, 'CHAT_MAX_CONVERSATIONS_PER_USER', 500))
+        if limit > 0 and Conversation.objects.filter(user=request.user).count() >= limit:
+            return Response(
+                {'detail': 'Atingiste o número máximo de conversas para esta conta.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         ser = ConversationCreateSerializer(data=request.data, context={'request': request})
         ser.is_valid(raise_exception=True)
         conv = ser.save()
@@ -70,6 +79,7 @@ class ConversationMessagesView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'chat'
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request, pk):
         conv = get_object_or_404(Conversation, pk=pk, user=request.user)
@@ -81,10 +91,41 @@ class ConversationMessagesView(APIView):
 
     def post(self, request, pk):
         conv = get_object_or_404(Conversation, pk=pk, user=request.user)
-        ser = ChatSendSerializer(data=request.data)
+        ser = ChatSendSerializer(data=request.data, context={'request': request})
         ser.is_valid(raise_exception=True)
-        content = ser.validated_data['content']
-        document_ids = ser.validated_data.get('document_ids')
+        validated = ser.validated_data
+        content = validated['content']
+        uploaded = request.FILES.get('file')
+        document_ids = validated.get('document_ids')
+
+        attachment_context: str | None = None
+        attachment_filename: str | None = None
+        if uploaded is not None:
+            try:
+                raw_att = extract_text_from_uploaded_pdf(uploaded)
+                attachment_context = truncate_for_rag(raw_att)
+                attachment_filename = (getattr(uploaded, 'name', None) or 'anexo.pdf')[:255]
+            except ChatAttachmentError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            if not (attachment_context or '').strip():
+                return Response(
+                    {'detail': 'Não foi possível extrair texto deste PDF.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        display_parts: list[str] = []
+        if content:
+            display_parts.append(content)
+        if uploaded is not None and attachment_filename:
+            display_parts.append(f'[Anexo: {attachment_filename}]')
+        stored_content = '\n\n'.join(display_parts) if display_parts else (
+            f'[Anexo: {attachment_filename}]' if attachment_filename else content
+        )
+
+        rag_question = content.strip() if content.strip() else (
+            'Responde com base no PDF anexado a esta mensagem e nos documentos do utilizador '
+            'quando forem relevantes.'
+        )
 
         if document_ids is not None:
             found = set(
@@ -105,11 +146,11 @@ class ConversationMessagesView(APIView):
             user_msg = Message.objects.create(
                 conversation=conv,
                 role=Message.Role.USER,
-                content=content,
+                content=stored_content,
             )
             conv_updates: dict = {'updated_at': now}
             if not (conv.title or '').strip():
-                stripped = content.strip()
+                stripped = (content or stored_content).strip()
                 title = stripped[:80]
                 if len(stripped) > 80:
                     title += '…'
@@ -125,8 +166,10 @@ class ConversationMessagesView(APIView):
         try:
             payload = run_rag_for_user(
                 user_id=request.user.pk,
-                question=content,
+                question=rag_question,
                 document_ids=document_ids,
+                attachment_context=attachment_context,
+                attachment_filename=attachment_filename,
             )
         except ValueError as exc:
             return _err(str(exc), status.HTTP_400_BAD_REQUEST, user_msg_for_body=user_msg)
