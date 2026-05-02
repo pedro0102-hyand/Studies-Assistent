@@ -27,13 +27,6 @@ class _ChromaBundle(NamedTuple):
     collection: Any
 
 
-def reset_chroma_singleton_for_tests() -> None:
-    """Limpa a cache do processo (apenas testes)."""
-    global _chroma
-    with _chroma_lock:
-        _chroma = None
-
-
 def _get_collection():
     global _chroma
     if _chroma is not None:
