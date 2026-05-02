@@ -1,4 +1,7 @@
-"""Extração e validação de PDF anexado a uma mensagem de chat (sem gravar Document)."""
+"""Extração e validação de PDF anexado a uma mensagem de chat.
+
+A persistência na biblioteca (modelo ``Document``) é feita na view de mensagens.
+"""
 
 from __future__ import annotations
 

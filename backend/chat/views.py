@@ -1,5 +1,9 @@
+import os
+import threading
+
 from django.conf import settings
 from django.db import transaction
+from django.utils.text import get_valid_filename
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -15,6 +19,7 @@ from documents.models import Document
 from documents.ollama_chat import OllamaChatError
 from documents.ollama_embed import OllamaEmbedError
 from documents.rag import run_rag_for_user
+from documents.tasks import process_document_extraction
 
 from .models import Conversation, Message
 from .pdf_attachment import ChatAttachmentError, extract_text_from_uploaded_pdf, truncate_for_rag
@@ -112,6 +117,33 @@ class ConversationMessagesView(APIView):
                     {'detail': 'Não foi possível extrair texto deste PDF.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            # Mesmo PDF na biblioteca do utilizador (Meus PDFs) para RAG futuro e lista unificada.
+            uploaded.seek(0)
+            library_original = get_valid_filename(
+                os.path.basename(getattr(uploaded, 'name', '') or 'document.pdf')
+            )
+            library_doc = Document.objects.create(
+                user=request.user,
+                original_name=library_original,
+                file=uploaded,
+            )
+            try:
+                process_document_extraction.delay(library_doc.pk)
+            except Exception:
+                if getattr(settings, 'DEBUG', False):
+                    threading.Thread(
+                        target=process_document_extraction,
+                        args=(library_doc.pk,),
+                        daemon=True,
+                    ).start()
+                else:
+                    return Response(
+                        {
+                            'detail': 'Fila de processamento indisponível (Celery/Redis).',
+                        },
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
 
         display_parts: list[str] = []
         if content:
