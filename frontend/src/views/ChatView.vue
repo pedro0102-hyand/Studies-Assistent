@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, computed } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
 import { fetchAllPaginatedResults } from '@/lib/paginatedList'
@@ -53,6 +53,26 @@ function syncIsMobile() {
 }
 const showSources = ref<number | null>(null)
 const attachedFile = ref<File | null>(null)
+/** Indicador visual ao arrastar ficheiros sobre a área do chat. */
+const fileDragOverlay = ref(false)
+let fileDragDepth = 0
+
+const ATTACH_MAX_BYTES = 25 * 1024 * 1024
+const ATTACH_NAME_RE = /\.(pdf|docx?|txt|md)$/i
+
+function tryAttachFile(file: File | null): void {
+  if (!file) return
+  if (file.size > ATTACH_MAX_BYTES) {
+    sendError.value = 'Arquivo muito grande (máx. 25 MB).'
+    return
+  }
+  if (!ATTACH_NAME_RE.test(file.name)) {
+    sendError.value = 'Formato não suportado. Use PDF, DOC, DOCX, TXT ou MD.'
+    return
+  }
+  sendError.value = null
+  attachedFile.value = file
+}
 
 // Renomear conversa
 const renamingId = ref<number | null>(null)
@@ -286,12 +306,49 @@ function onFileSelected(ev: Event) {
   const el = ev.target as HTMLInputElement
   const file = el.files?.[0] ?? null
   el.value = ''
-  if (!file) return
-  if (file.size > 25 * 1024 * 1024) {
-    sendError.value = 'Arquivo muito grande (máx. 25 MB).'
-    return
-  }
-  attachedFile.value = file
+  tryAttachFile(file)
+}
+
+function dataTransferHasFiles(dt: DataTransfer | null): boolean {
+  return !!dt?.types?.includes('Files')
+}
+
+function onFileDragEnter(e: DragEvent) {
+  if (selectedId.value === null || sendPending.value) return
+  if (!dataTransferHasFiles(e.dataTransfer)) return
+  e.preventDefault()
+  fileDragDepth++
+  fileDragOverlay.value = true
+}
+
+function onFileDragLeave(e: DragEvent) {
+  if (selectedId.value === null) return
+  if (!dataTransferHasFiles(e.dataTransfer)) return
+  fileDragDepth--
+  if (fileDragDepth < 0) fileDragDepth = 0
+  if (fileDragDepth === 0) fileDragOverlay.value = false
+}
+
+function onFileDragOver(e: DragEvent) {
+  if (selectedId.value === null || sendPending.value) return
+  if (!dataTransferHasFiles(e.dataTransfer)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+}
+
+function onFileDrop(e: DragEvent) {
+  fileDragDepth = 0
+  fileDragOverlay.value = false
+  if (selectedId.value === null || sendPending.value) return
+  if (!dataTransferHasFiles(e.dataTransfer)) return
+  e.preventDefault()
+  const file = e.dataTransfer?.files?.[0] ?? null
+  tryAttachFile(file)
+}
+
+function resetFileDragUi() {
+  fileDragDepth = 0
+  fileDragOverlay.value = false
 }
 
 // ── Helpers ────────────────────────────────────────────────
@@ -318,17 +375,23 @@ async function onLogout() {
   router.push('/login')
 }
 
+watch(selectedId, resetFileDragUi)
+
 onMounted(() => {
   syncIsMobile()
   if (typeof window !== 'undefined') {
     isMobileMql = window.matchMedia('(max-width: 700px)')
     isMobileMql.addEventListener('change', syncIsMobile)
+    window.addEventListener('dragend', resetFileDragUi)
   }
   void loadConversations()
 })
 
 onBeforeUnmount(() => {
   isMobileMql?.removeEventListener('change', syncIsMobile)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('dragend', resetFileDragUi)
+  }
 })
 </script>
 
@@ -464,6 +527,13 @@ onBeforeUnmount(() => {
         </button>
       </header>
 
+      <div
+        class="chat-main-column"
+        @dragenter="onFileDragEnter"
+        @dragleave="onFileDragLeave"
+        @dragover="onFileDragOver"
+        @drop="onFileDrop"
+      >
       <!-- Mensagens -->
       <div class="messages-area">
 
@@ -632,8 +702,26 @@ onBeforeUnmount(() => {
             </svg>
           </button>
         </div>
-        <p class="compose-hint">Enter para enviar · Shift+Enter para nova linha</p>
+        <p class="compose-hint">
+          Enter para enviar · Shift+Enter para nova linha · arraste ficheiros para anexar
+        </p>
       </div>
+
+      <div
+        v-if="selectedId !== null"
+        class="drop-overlay"
+        :class="{ 'drop-overlay--active': fileDragOverlay }"
+        aria-hidden="true"
+      >
+        <div class="drop-overlay-inner">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+          <span>Solte para anexar</span>
+        </div>
+      </div>
+      </div>
+
     </div>
 
     <!-- Overlay mobile -->
@@ -912,6 +1000,15 @@ export default defineComponent({ name: 'ChatView' })
   min-width: 0;
   height: 100vh;
   overflow: hidden;
+  position: relative;
+}
+
+.chat-main-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
 }
 
 /* ── Topbar (mobile) ── */
@@ -1309,6 +1406,40 @@ export default defineComponent({ name: 'ChatView' })
   max-width: 48rem;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* ── Drag and drop ── */
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border-radius: var(--radius);
+  margin: 0.35rem;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: var(--accent-soft);
+  border: 2px dashed transparent;
+}
+
+.drop-overlay--active {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+.drop-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: center;
+  padding: 1rem;
 }
 
 /* ── Overlay mobile ── */
