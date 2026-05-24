@@ -373,9 +373,9 @@ onMounted(() => {
         </div>
 
         <div class="compose-box">
-          <input ref="fileInputRef" type="file" accept=".pdf,.doc,.docx,.txt,.md" class="sr-only" @change="onFileSelected"/>
+          <input ref="fileInputRef" type="file" accept=".pdf,application/pdf" class="sr-only" @change="onFileSelected"/>
 
-          <button class="compose-icon-btn" title="Anexar arquivo" :disabled="sendPending" @click="openFilePicker">
+          <button class="compose-icon-btn" title="Anexar PDF" :disabled="sendPending" @click="openFilePicker">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
@@ -406,7 +406,7 @@ onMounted(() => {
           </button>
         </div>
         <p class="compose-hint">
-          Enter para enviar · Shift+Enter para nova linha · arraste ficheiros para anexar
+          Enter para enviar · Shift+Enter para nova linha · arraste um PDF para anexar
         </p>
       </div>
 
@@ -420,7 +420,7 @@ onMounted(() => {
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
           </svg>
-          <span>Solte para anexar</span>
+          <span>Solte o PDF para anexar</span>
         </div>
       </div>
       </div>

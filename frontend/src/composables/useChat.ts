@@ -5,7 +5,7 @@ import { fetchAllPaginatedResults } from '@/lib/paginatedList'
 import type { ApiChatMessage } from '@/types/api'
 
 const ATTACH_MAX_BYTES = 25 * 1024 * 1024
-const ATTACH_NAME_RE = /\.(pdf|docx?|txt|md)$/i
+const ATTACH_NAME_RE = /\.pdf$/i
 
 export function useChatAttachment(options: {
   selectedId: Ref<number | null>
@@ -24,7 +24,7 @@ export function useChatAttachment(options: {
       return
     }
     if (!ATTACH_NAME_RE.test(file.name)) {
-      options.sendError.value = 'Formato não suportado. Use PDF, DOC, DOCX, TXT ou MD.'
+      options.sendError.value = 'Formato não suportado. Apenas arquivos PDF.'
       return
     }
     options.sendError.value = null
