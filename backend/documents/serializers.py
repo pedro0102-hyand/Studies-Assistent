@@ -1,13 +1,16 @@
 import os
+
 from django.conf import settings
 from django.utils.text import get_valid_filename
 from rest_framework import serializers
+
 from .models import Document
+from .utils import normalize_document_ids
 
-PDF_MAGIC = b'%PDF' # Magic number for PDF files
-MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB  Maximum size for PDF files
+PDF_MAGIC = b'%PDF'
+MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB
 
-# Serializer for Document detail
+
 class DocumentDetailSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     text_char_count = serializers.SerializerMethodField()
@@ -34,26 +37,21 @@ class DocumentDetailSerializer(serializers.ModelSerializer):
     def get_text_char_count(self, obj: Document) -> int:
         return len(obj.extracted_text or '')
 
-    # Get the URL of the file
     def get_file_url(self, obj: Document) -> str:
-
-        request = self.context.get('request') # Get the request
-
+        request = self.context.get('request')
         if not obj.file:
             return ''
-        url = obj.file.url # Get the URL of the file
+        url = obj.file.url
         if request:
-            return request.build_absolute_uri(url) # Build the absolute URI
+            return request.build_absolute_uri(url)
         return url
 
-# Serializer for Document upload
+
 class DocumentUploadSerializer(serializers.Serializer):
+    file = serializers.FileField(write_only=True)
 
-    file = serializers.FileField(write_only=True) # File field for the PDF file
-
-    def validate_file(self, value): # Validate the file
-
-        if value.size > MAX_PDF_BYTES: # Check if the file size is greater than the maximum size
+    def validate_file(self, value):
+        if value.size > MAX_PDF_BYTES:
             raise serializers.ValidationError(
                 f'O ficheiro excede o limite de {MAX_PDF_BYTES // (1024 * 1024)} MB.'
             )
@@ -75,94 +73,49 @@ class DocumentUploadSerializer(serializers.Serializer):
 
         return value
 
-    def create(self, validated_data): # Create the document
-
-        request = self.context['request'] # Get the request
-        f = validated_data['file']
-        original_name = get_valid_filename(os.path.basename(f.name or 'document.pdf')) # Get the original name of the file
-
+    def create(self, validated_data):
+        request = self.context['request']
+        uploaded = validated_data['file']
+        original_name = get_valid_filename(
+            os.path.basename(uploaded.name or 'document.pdf')
+        )
         return Document.objects.create(
-            # Create the document
             user=request.user,
             original_name=original_name,
-            file=f,
-
+            file=uploaded,
         )
 
 
-# --- Etapa 5.1 — contrato JSON do endpoint RAG (perguntar aos PDFs) ---
+class DocumentIdsField(serializers.ListField):
+    """Lista opcional de IDs de documentos do utilizador (deduplicada)."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault('child', serializers.IntegerField(min_value=1))
+        kwargs.setdefault('required', False)
+        kwargs.setdefault('allow_null', True)
+        kwargs.setdefault(
+            'max_length',
+            getattr(settings, 'RAG_MAX_FILTER_DOCUMENTS', 20),
+        )
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        return normalize_document_ids(super().to_internal_value(data))
 
 
 class RagAskRequestSerializer(serializers.Serializer):
-    """
-    POST /api/rag/ask/ — corpo do pedido.
-
-    - question: texto da pergunta (obrigatório).
-    - document_ids: opcional; se presente, restringe a recuperação a estes IDs de Document
-      do utilizador (validação de posse no serviço RAG).
-    """
+    """POST /api/rag/ask/ — question obrigatória; document_ids opcional."""
 
     question = serializers.CharField(
         trim_whitespace=True,
         min_length=1,
         max_length=getattr(settings, 'RAG_MAX_QUESTION_LENGTH', 4000),
     )
-    document_ids = serializers.ListField(
-        child=serializers.IntegerField(min_value=1),
-        required=False,
-        allow_null=True,
-        max_length=getattr(settings, 'RAG_MAX_FILTER_DOCUMENTS', 20),
-    )
-
-    def validate_document_ids(self, value):
-        if value is None:
-            return None
-        if len(value) == 0:
-            return None
-        # IDs únicos, ordem estável
-        seen: set[int] = set()
-        out: list[int] = []
-        for x in value:
-            if x not in seen:
-                seen.add(x)
-                out.append(x)
-        return out
-
-
-class RagSourceSerializer(serializers.Serializer):
-    """Uma fonte citada na resposta (chunk recuperado)."""
-
-    document_id = serializers.IntegerField()
-    chunk_index = serializers.IntegerField(min_value=0)
-    original_name = serializers.CharField()
-    excerpt = serializers.CharField()
-
-
-class RagAskResponseSerializer(serializers.Serializer):
-    """
-    Corpo da resposta de sucesso do RAG.
-
-    - answer: texto gerado pelo modelo.
-    - sources: trechos usados como contexto (opcional mas recomendado para transparência).
-    """
-
-    answer = serializers.CharField()
-    sources = RagSourceSerializer(many=True, required=False)
-
-
-# --- Geração de materiais (resumo / exercícios / roadmap) ---
+    document_ids = DocumentIdsField()
 
 
 class RagGenerateRequestSerializer(serializers.Serializer):
-    """
-    POST /api/rag/generate/ — gera um documento de estudo com base nos PDFs do utilizador.
-
-    - kind: tipo do documento a gerar.
-    - title: opcional; título exibido no documento.
-    - topic: opcional; tema/pergunta/assunto.
-    - instructions: opcional; instruções adicionais.
-    - document_ids: opcional; restringe a recuperação a estes documentos do utilizador.
-    """
+    """POST /api/rag/generate/ — gera material de estudo em Markdown."""
 
     kind = serializers.ChoiceField(
         choices=[
@@ -189,14 +142,4 @@ class RagGenerateRequestSerializer(serializers.Serializer):
         trim_whitespace=True,
         max_length=4000,
     )
-    document_ids = RagAskRequestSerializer().fields['document_ids']
-
-    def validate_document_ids(self, value):
-        return RagAskRequestSerializer().validate_document_ids(value)
-
-
-class RagGenerateResponseSerializer(serializers.Serializer):
-    kind = serializers.CharField()
-    title = serializers.CharField()
-    markdown = serializers.CharField()
-    sources = RagSourceSerializer(many=True, required=False)
+    document_ids = DocumentIdsField()

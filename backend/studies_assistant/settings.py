@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Raiz do repositório (pasta acima de `backend/`) — para .env e chroma_data
 REPO_ROOT = BASE_DIR.parent
 
-# Etapa 4.1 — variáveis de ambiente (ficheiro `.env` na raiz do projeto)
+# Variáveis de ambiente (ficheiro `.env` na raiz do projeto)
 load_dotenv(REPO_ROOT / '.env')
 load_dotenv(BASE_DIR / '.env', override=True)
 
@@ -43,11 +43,11 @@ CHROMA_PERSIST_PATH = (
 )
 CHROMA_COLLECTION_NAME = os.environ.get('CHROMA_COLLECTION_NAME', 'study_documents')
 
-# Etapa 4.3 — chunking (caracteres)
+# Chunking RAG (caracteres)
 RAG_CHUNK_SIZE = int(os.environ.get('RAG_CHUNK_SIZE', '1500'))
 RAG_CHUNK_OVERLAP = int(os.environ.get('RAG_CHUNK_OVERLAP', '200'))
 
-# Etapa 5.1 — RAG: modelo de chat no Ollama e limites
+# RAG: modelo de chat no Ollama e limites
 OLLAMA_CHAT_MODEL = os.environ.get('OLLAMA_CHAT_MODEL', 'gemma2:2b').strip() or 'gemma2:2b'
 OLLAMA_CHAT_TIMEOUT = float(os.environ.get('OLLAMA_CHAT_TIMEOUT', '180'))
 RAG_TOP_K = max(1, min(50, int(os.environ.get('RAG_TOP_K', '5'))))
@@ -61,7 +61,7 @@ RAG_DIVERSIFY_RESULTS = os.environ.get('RAG_DIVERSIFY_RESULTS', 'true').strip().
 )
 RAG_MAX_CHUNKS_PER_DOCUMENT = max(1, min(10, int(os.environ.get('RAG_MAX_CHUNKS_PER_DOCUMENT', '2'))))
 
-# Etapa 5.5 — mensagem de sistema do RAG (opcional via .env)
+# Mensagem de sistema do RAG (opcional via .env)
 _rag_sys = os.environ.get('RAG_SYSTEM_PROMPT', '').strip()
 RAG_SYSTEM_PROMPT = _rag_sys or (
     'Responde só com base no contexto fornecido. '
@@ -69,9 +69,9 @@ RAG_SYSTEM_PROMPT = _rag_sys or (
     'diz claramente que não há informação nos documentos.'
 )
 
-# Etapa 5.7 — limite de pedidos ao endpoint RAG (DRF ScopedRateThrottle)
+# Limite de pedidos ao endpoint RAG (DRF ScopedRateThrottle)
 _rag_throttle_rate = os.environ.get('RAG_THROTTLE_RATE', '30/min').strip() or '30/min'
-# Etapa 6 — chat (listar conversas / enviar mensagens)
+# Chat (listar conversas / enviar mensagens)
 _chat_throttle_rate = os.environ.get('CHAT_THROTTLE_RATE', '60/min').strip() or '60/min'
 # Autenticação — força bruta / spam de contas (por IP)
 _auth_login_throttle_rate = (
@@ -301,7 +301,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-# Ficheiros enviados (PDFs) — Etapa 3
+# Ficheiros enviados (PDFs)
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
 # Uploads até ~25 MB (limite alinhado com documents.serializers.MAX_PDF_BYTES)
@@ -312,7 +312,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 26 * 1024 * 1024
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Django REST framework + JWT (Etapa 2.1)
+# Django REST framework + JWT
 # Utilizadores: modelo User padrão do Django (sem AbstractUser custom por agora).
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [

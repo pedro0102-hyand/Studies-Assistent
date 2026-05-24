@@ -3,7 +3,7 @@ from django.db import models
 
 
 class Conversation(models.Model):
-    """Etapa 6 — conversa por utilizador (histórico no Postgres)."""
+    """Conversa por utilizador (histórico persistido)."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

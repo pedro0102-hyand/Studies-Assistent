@@ -5,14 +5,10 @@ A persistência na biblioteca (modelo ``Document``) é feita na view de mensagen
 
 from __future__ import annotations
 
-import logging
-from io import BytesIO
-
 from django.conf import settings
 
+from documents.pdf_text import extract_pdf_text_from_bytes
 from documents.serializers import MAX_PDF_BYTES, PDF_MAGIC
-
-logger = logging.getLogger(__name__)
 
 
 class ChatAttachmentError(Exception):
@@ -31,7 +27,8 @@ def extract_text_from_uploaded_pdf(uploaded) -> str:
     if not name.endswith('.pdf'):
         raise ChatAttachmentError('Apenas ficheiros .pdf são permitidos no chat.')
 
-    if getattr(uploaded, 'size', 0) > MAX_PDF_BYTES:
+    size = getattr(uploaded, 'size', 0)
+    if size > MAX_PDF_BYTES:
         raise ChatAttachmentError(
             f'O PDF excede o limite de {MAX_PDF_BYTES // (1024 * 1024)} MB.'
         )
@@ -49,23 +46,11 @@ def extract_text_from_uploaded_pdf(uploaded) -> str:
         )
 
     try:
-        from pypdf import PdfReader
+        return extract_pdf_text_from_bytes(data)
     except ImportError as exc:
         raise ChatAttachmentError(
             'Dependência em falta: pip install pypdf'
         ) from exc
-
-    try:
-        reader = PdfReader(BytesIO(data))
-        parts: list[str] = []
-        for i, page in enumerate(reader.pages):
-            try:
-                t = page.extract_text()
-                if t:
-                    parts.append(t)
-            except Exception as exc:
-                logger.warning('Chat PDF: falha na página %s: %s', i, exc)
-        return '\n\n'.join(parts).strip()
     except Exception as exc:
         raise ChatAttachmentError(f'Não foi possível ler o PDF: {exc}') from exc
 

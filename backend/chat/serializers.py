@@ -1,6 +1,8 @@
 from django.conf import settings
 from rest_framework import serializers
 
+from documents.serializers import DocumentIdsField
+
 from .models import Conversation, Message
 
 
@@ -43,25 +45,7 @@ class ChatSendSerializer(serializers.Serializer):
         default='',
         max_length=getattr(settings, 'RAG_MAX_QUESTION_LENGTH', 4000),
     )
-    document_ids = serializers.ListField(
-        child=serializers.IntegerField(min_value=1),
-        required=False,
-        allow_null=True,
-        max_length=getattr(settings, 'RAG_MAX_FILTER_DOCUMENTS', 20),
-    )
-
-    def validate_document_ids(self, value):
-        if value is None:
-            return None
-        if len(value) == 0:
-            return None
-        seen: set[int] = set()
-        out: list[int] = []
-        for x in value:
-            if x not in seen:
-                seen.add(x)
-                out.append(x)
-        return out
+    document_ids = DocumentIdsField()
 
     def validate(self, attrs):
         request = self.context.get('request')

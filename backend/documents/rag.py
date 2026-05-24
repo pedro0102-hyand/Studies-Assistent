@@ -1,6 +1,4 @@
-"""
-Etapa 5+ — RAG: embedding da pergunta e (mais tarde) retrieval + LLM.
-"""
+"""RAG: embedding da pergunta, retrieval no ChromaDB e geração via LLM."""
 from __future__ import annotations
 
 from typing import Any
@@ -23,7 +21,7 @@ def build_context_from_chunks(
     excerpt_limit: int = 800,
 ) -> tuple[str, list[dict[str, Any]]]:
     """
-    Etapa 5.4 — junta os textos dos chunks recuperados até `RAG_MAX_CONTEXT_CHARS`.
+    Junta os textos dos chunks recuperados até `RAG_MAX_CONTEXT_CHARS`.
 
     - `label_sources`: prefixa cada bloco com ``[fonte: nome, chunk i]`` para transparência.
     - Devolve ``(contexto_para_llm, sources)`` onde ``sources`` segue o contrato RagSource
@@ -108,7 +106,7 @@ def generate_rag_answer(
     system_prompt: str | None = None,
 ) -> str:
     """
-    Etapa 5.5 — gera a resposta com o modelo de chat do Ollama (``OLLAMA_CHAT_*``).
+    Gera a resposta com o modelo de chat do Ollama (``OLLAMA_CHAT_*``).
 
     System: instruções de fidelidade ao contexto (``RAG_SYSTEM_PROMPT`` ou override).
     User: bloco com contexto recuperado + pergunta.
@@ -179,7 +177,7 @@ def run_rag_for_user(
     attachment_filename: str | None = None,
 ) -> dict[str, Any]:
     """
-    Etapa 5.6 — pipeline completo: embedding → Chroma (sempre com filtro user_id) →
+    Pipeline completo: embedding → Chroma (sempre com filtro user_id) →
     contexto → resposta LLM. ``document_ids`` já deve estar validado em relação ao utilizador.
 
     ``attachment_context``: texto extraído de um PDF anexado à mensagem; junta-se ao contexto

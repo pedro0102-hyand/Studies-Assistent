@@ -10,7 +10,7 @@ from documents.models import Document
 
 class Command(BaseCommand):
 
-    help = 'Lista os chunks (Etapa 4.3) recalculados a partir de `extracted_text` do documento.'
+    help = 'Lista os chunks recalculados a partir de `extracted_text` do documento.'
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(

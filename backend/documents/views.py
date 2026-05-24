@@ -10,8 +10,6 @@ from core.pagination import DocumentListPagination
 
 from .chroma_index import delete_chroma_for_document
 from .models import Document
-from .ollama_chat import OllamaChatError
-from .ollama_embed import OllamaEmbedError
 from .rag import run_rag_for_user, run_rag_generate_for_user
 from .serializers import (
     DocumentDetailSerializer,
@@ -19,9 +17,12 @@ from .serializers import (
     RagAskRequestSerializer,
     RagGenerateRequestSerializer,
 )
-from .tasks import process_document_extraction
-from django.conf import settings
-import threading
+from .utils import (
+    INVALID_DOCUMENT_IDS_DETAIL,
+    document_ids_invalid_for_user,
+    enqueue_document_extraction,
+    run_rag_or_error,
+)
 
 
 class DocumentDetailView(APIView):
@@ -43,9 +44,8 @@ class DocumentDetailView(APIView):
         doc.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-# Listar os documentos
+
 class DocumentListView(APIView):
-   
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -57,37 +57,26 @@ class DocumentListView(APIView):
         )
         return paginator.get_paginated_response(serializer.data)
 
-# Upload de documento
+
 class DocumentUploadView(APIView):
-   
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
-    def post(self, request): # Upload de documento
-
-        serializer = DocumentUploadSerializer( # Serializar o documento
+    def post(self, request):
+        serializer = DocumentUploadSerializer(
             data=request.data,
             context={'request': request},
         )
-
         serializer.is_valid(raise_exception=True)
         document = serializer.save()
-        # Enfileira para Celery; em DEBUG sem Redis, pode falhar — faz fallback sem bloquear request.
-        try:
-            process_document_extraction.delay(document.pk)
-        except Exception:
-            if getattr(settings, 'DEBUG', False):
-                threading.Thread(
-                    target=process_document_extraction,
-                    args=(document.pk,),
-                    daemon=True,
-                ).start()
-            else:
-                # Em produção, expõe falha de infraestrutura em vez de fingir sucesso.
-                return Response(
-                    {'detail': 'Fila de processamento indisponível (Celery/Redis).'},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
+
+        queue_error = enqueue_document_extraction(document.pk)
+        if queue_error:
+            return Response(
+                {'detail': queue_error},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         document.refresh_from_db()
         out = DocumentDetailSerializer(document, context={'request': request})
         return Response(out.data, status=status.HTTP_201_CREATED)
@@ -106,34 +95,22 @@ class RagAskView(APIView):
         question = serializer.validated_data['question']
         document_ids = serializer.validated_data.get('document_ids')
 
-        if document_ids is not None:
-            found = set(
-                Document.objects.filter(
-                    user=request.user, pk__in=document_ids
-                ).values_list('pk', flat=True)
+        if document_ids_invalid_for_user(request.user, document_ids):
+            return Response(
+                {'detail': INVALID_DOCUMENT_IDS_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            if set(document_ids) != found:
-                return Response(
-                    {
-                        'detail': 'Um ou mais document_ids são inválidos ou não pertencem ao utilizador.',
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
-        try:
-            payload = run_rag_for_user(
+        payload, err = run_rag_or_error(
+            lambda: run_rag_for_user(
                 user_id=request.user.pk,
                 question=question,
                 document_ids=document_ids,
             )
-        except ValueError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except OllamaEmbedError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        except OllamaChatError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        except RuntimeError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        )
+        if err:
+            detail, code = err
+            return Response({'detail': detail}, status=code)
 
         return Response(payload, status=status.HTTP_200_OK)
 
@@ -154,22 +131,14 @@ class RagGenerateView(APIView):
         instructions = serializer.validated_data.get('instructions') or ''
         document_ids = serializer.validated_data.get('document_ids')
 
-        if document_ids is not None:
-            found = set(
-                Document.objects.filter(
-                    user=request.user, pk__in=document_ids
-                ).values_list('pk', flat=True)
+        if document_ids_invalid_for_user(request.user, document_ids):
+            return Response(
+                {'detail': INVALID_DOCUMENT_IDS_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            if set(document_ids) != found:
-                return Response(
-                    {
-                        'detail': 'Um ou mais document_ids são inválidos ou não pertencem ao utilizador.',
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
-        try:
-            payload = run_rag_generate_for_user(
+        payload, err = run_rag_or_error(
+            lambda: run_rag_generate_for_user(
                 user_id=request.user.pk,
                 kind=kind,
                 title=title,
@@ -177,13 +146,9 @@ class RagGenerateView(APIView):
                 instructions=instructions,
                 document_ids=document_ids,
             )
-        except ValueError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        except OllamaEmbedError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        except OllamaChatError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
-        except RuntimeError as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        )
+        if err:
+            detail, code = err
+            return Response({'detail': detail}, status=code)
 
         return Response(payload, status=status.HTTP_200_OK)

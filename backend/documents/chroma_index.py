@@ -1,5 +1,4 @@
-"""
-Etapa 4.5 — persistência de embeddings no ChromaDB (vetores + texto + metadados).
+"""Persistência de embeddings no ChromaDB (vetores + texto + metadados).
 
 O cliente Chroma é mantido por processo (lazy + thread-safe). Cada worker do
 Gunicorn é um processo separado com a sua própria instância; não há estado
@@ -123,7 +122,7 @@ def search_similar_chunks(
     document_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Etapa 5.3 — pesquisa por similaridade no Chroma com isolamento por utilizador.
+    Pesquisa por similaridade no Chroma com isolamento por utilizador.
 
     - `user_id` é obrigatório nos metadados (nunca pesquisar sem este filtro).
     - `document_ids`, se preenchido, limita aos documentos indicados (após validação

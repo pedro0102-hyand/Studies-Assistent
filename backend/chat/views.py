@@ -1,11 +1,10 @@
 import os
-import threading
 
 from django.conf import settings
 from django.db import transaction
-from django.utils.text import get_valid_filename
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.text import get_valid_filename
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -14,12 +13,14 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from core.pagination import ConversationListPagination, MessageListPagination
-
 from documents.models import Document
-from documents.ollama_chat import OllamaChatError
-from documents.ollama_embed import OllamaEmbedError
 from documents.rag import run_rag_for_user
-from documents.tasks import process_document_extraction
+from documents.utils import (
+    INVALID_DOCUMENT_IDS_DETAIL,
+    document_ids_invalid_for_user,
+    enqueue_document_extraction,
+    run_rag_or_error,
+)
 
 from .models import Conversation, Message
 from .pdf_attachment import ChatAttachmentError, extract_text_from_uploaded_pdf, truncate_for_rag
@@ -66,7 +67,7 @@ class ConversationDetailDeleteView(APIView):
         conv = get_object_or_404(Conversation, pk=pk, user=request.user)
         conv.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
+
     def patch(self, request, pk):
         """Renomeia uma conversa (PATCH { "title": "novo nome" })."""
         conv = get_object_or_404(Conversation, pk=pk, user=request.user)
@@ -118,7 +119,6 @@ class ConversationMessagesView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Mesmo PDF na biblioteca do utilizador (Meus PDFs) para RAG futuro e lista unificada.
             uploaded.seek(0)
             library_original = get_valid_filename(
                 os.path.basename(getattr(uploaded, 'name', '') or 'document.pdf')
@@ -128,22 +128,12 @@ class ConversationMessagesView(APIView):
                 original_name=library_original,
                 file=uploaded,
             )
-            try:
-                process_document_extraction.delay(library_doc.pk)
-            except Exception:
-                if getattr(settings, 'DEBUG', False):
-                    threading.Thread(
-                        target=process_document_extraction,
-                        args=(library_doc.pk,),
-                        daemon=True,
-                    ).start()
-                else:
-                    return Response(
-                        {
-                            'detail': 'Fila de processamento indisponível (Celery/Redis).',
-                        },
-                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    )
+            queue_error = enqueue_document_extraction(library_doc.pk)
+            if queue_error:
+                return Response(
+                    {'detail': queue_error},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
 
         display_parts: list[str] = []
         if content:
@@ -159,19 +149,11 @@ class ConversationMessagesView(APIView):
             'quando forem relevantes.'
         )
 
-        if document_ids is not None:
-            found = set(
-                Document.objects.filter(
-                    user=request.user, pk__in=document_ids
-                ).values_list('pk', flat=True)
+        if document_ids_invalid_for_user(request.user, document_ids):
+            return Response(
+                {'detail': INVALID_DOCUMENT_IDS_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            if set(document_ids) != found:
-                return Response(
-                    {
-                        'detail': 'Um ou mais document_ids são inválidos ou não pertencem ao utilizador.',
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
         now = timezone.now()
         with transaction.atomic():
@@ -189,28 +171,27 @@ class ConversationMessagesView(APIView):
                 conv_updates['title'] = title
             Conversation.objects.filter(pk=conv.pk).update(**conv_updates)
 
-        def _err(detail: str, code: int, *, user_msg_for_body: Message | None = None):
-            body: dict = {'detail': detail}
-            if user_msg_for_body is not None:
-                body['user_message'] = MessageSerializer(user_msg_for_body).data
-            return Response(body, status=code)
+        def _err(detail: str, code: int):
+            return Response(
+                {
+                    'detail': detail,
+                    'user_message': MessageSerializer(user_msg).data,
+                },
+                status=code,
+            )
 
-        try:
-            payload = run_rag_for_user(
+        payload, err = run_rag_or_error(
+            lambda: run_rag_for_user(
                 user_id=request.user.pk,
                 question=rag_question,
                 document_ids=document_ids,
                 attachment_context=attachment_context,
                 attachment_filename=attachment_filename,
             )
-        except ValueError as exc:
-            return _err(str(exc), status.HTTP_400_BAD_REQUEST, user_msg_for_body=user_msg)
-        except OllamaEmbedError as exc:
-            return _err(str(exc), status.HTTP_502_BAD_GATEWAY, user_msg_for_body=user_msg)
-        except OllamaChatError as exc:
-            return _err(str(exc), status.HTTP_502_BAD_GATEWAY, user_msg_for_body=user_msg)
-        except RuntimeError as exc:
-            return _err(str(exc), status.HTTP_503_SERVICE_UNAVAILABLE, user_msg_for_body=user_msg)
+        )
+        if err:
+            detail, code = err
+            return _err(detail, code)
 
         with transaction.atomic():
             assistant_msg = Message.objects.create(

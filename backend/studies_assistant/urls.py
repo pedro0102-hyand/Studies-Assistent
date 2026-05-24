@@ -12,6 +12,6 @@ urlpatterns = [
     path('api/', include('chat.urls')),
 ]
 
-# Etapa 3.2 — servir ficheiros enviados em desenvolvimento (não usar isto em produção)
+# Servir ficheiros enviados em desenvolvimento (não usar isto em produção)
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
