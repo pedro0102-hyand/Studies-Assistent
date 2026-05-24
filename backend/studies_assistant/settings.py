@@ -323,7 +323,7 @@ REST_FRAMEWORK = {
         'core.authentication.JWTCookieAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_THROTTLE_RATES': {
         'rag': _rag_throttle_rate,

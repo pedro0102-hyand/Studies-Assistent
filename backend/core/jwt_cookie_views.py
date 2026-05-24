@@ -3,6 +3,7 @@
 from django.conf import settings
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import (
@@ -70,6 +71,7 @@ def _clear_auth_cookies(response) -> None:
 class CookieTokenObtainPairView(TokenObtainPairView):
     """POST username/password — define cookies; corpo sem tokens."""
 
+    permission_classes = [AllowAny]
     throttle_classes = [AuthLoginThrottle]
 
     def post(self, request, *args, **kwargs):
@@ -87,6 +89,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
 class CookieTokenRefreshView(TokenRefreshView):
     """POST — refresh a partir do cookie ou do body (compat.); novo access em cookie."""
 
+    permission_classes = [AllowAny]
     throttle_classes = [AuthRefreshThrottle]
 
     def post(self, request, *args, **kwargs):

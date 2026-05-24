@@ -1,16 +1,14 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .serializers import RegisterSerializer, UserMeSerializer
 from .throttles import AuthRegisterThrottle
 
 
-@api_view(['GET']) # Endpoint para verificar a saúde do backend
-
-@permission_classes([AllowAny]) # Permite acesso a todos os usuários
-
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def health(request):
     return Response({'status': 'ok'})
 
@@ -32,8 +30,7 @@ def register(request):
     )
 
 
-@api_view(['GET']) # Endpoint para obter o perfil do usuário autenticado
-@permission_classes([IsAuthenticated]) # Requer autenticação
+@api_view(['GET'])
 def me(request):
-    serializer = UserMeSerializer(request.user) # Serializa o usuário autenticado
-    return Response(serializer.data) # Retorna o perfil do usuário autenticado  
+    serializer = UserMeSerializer(request.user)
+    return Response(serializer.data)
