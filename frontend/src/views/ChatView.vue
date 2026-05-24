@@ -1,397 +1,100 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, computed, watch } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiFetch } from '@/lib/api'
-import { fetchAllPaginatedResults } from '@/lib/paginatedList'
 import { useAuth } from '@/composables/useAuth'
+import { useChatAttachment, useChatMessages } from '@/composables/useChat'
+import { useConversations } from '@/composables/useConversations'
+import { useLogout } from '@/composables/useLogout'
+import { useMediaQuery } from '@/composables/useMediaQuery'
+import { userInitial } from '@/lib/format'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-export interface ApiConversation {
-  id: number
-  title: string
-  created_at: string
-  updated_at: string
-  message_count: number
-}
-
-export interface ApiChatMessage {
-  id: number
-  role: 'user' | 'assistant'
-  content: string
-  sources: Array<{
-    document_id: number
-    chunk_index: number
-    original_name: string
-    excerpt: string
-  }>
-  created_at: string
-}
-
 const router = useRouter()
-const { user, logout } = useAuth()
+const { user } = useAuth()
+const { onLogout } = useLogout()
+const isMobile = useMediaQuery('(max-width: 700px)')
 
-const conversations = ref<ApiConversation[]>([])
-const selectedId = ref<number | null>(null)
-const messages = ref<ApiChatMessage[]>([])
-const input = ref('')
-const listLoading = ref(true)
-const messagesLoading = ref(false)
-const sendPending = ref(false)
-const sendError = ref<string | null>(null)
-const listError = ref<string | null>(null)
-const messagesEnd = ref<HTMLElement | null>(null)
 const composeRef = ref<HTMLTextAreaElement | null>(null)
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const sidebarOpen = ref(true)
-/** Largura < 700px — atualizado com matchMedia (evita constante fixa fora do setup). */
-const isMobile = ref(false)
-let isMobileMql: MediaQueryList | null = null
-function syncIsMobile() {
-  if (typeof window === 'undefined') return
-  isMobile.value = window.matchMedia('(max-width: 700px)').matches
-}
-const showSources = ref<number | null>(null)
 const attachedFile = ref<File | null>(null)
-/** Indicador visual ao arrastar ficheiros sobre a área do chat. */
-const fileDragOverlay = ref(false)
-let fileDragDepth = 0
+const sidebarOpen = ref(true)
 
-const ATTACH_MAX_BYTES = 25 * 1024 * 1024
-const ATTACH_NAME_RE = /\.(pdf|docx?|txt|md)$/i
+const {
+  conversations,
+  selectedId,
+  listLoading,
+  listError,
+  renamingId,
+  renameValue,
+  renameInputRef,
+  deleteConfirmOpen,
+  loadConversations,
+  newConversation,
+  selectConversation: pickConversation,
+  requestDeleteConversation,
+  confirmDeleteConversation,
+  startRename,
+  confirmRename,
+  onRenameKeydown,
+} = useConversations()
 
-function tryAttachFile(file: File | null): void {
-  if (!file) return
-  if (file.size > ATTACH_MAX_BYTES) {
-    sendError.value = 'Arquivo muito grande (máx. 25 MB).'
-    return
-  }
-  if (!ATTACH_NAME_RE.test(file.name)) {
-    sendError.value = 'Formato não suportado. Use PDF, DOC, DOCX, TXT ou MD.'
-    return
-  }
-  sendError.value = null
-  attachedFile.value = file
-}
+const {
+  messages,
+  input,
+  messagesLoading,
+  sendPending,
+  sendError,
+  messagesEnd,
+  showSources,
+  loadMessages,
+  send,
+  onKeydown,
+  autoResize,
+  clearMessages,
+} = useChatMessages({
+  selectedId,
+  loadConversations,
+  composeRef,
+  attachedFile,
+})
 
-// Renomear conversa
-const renamingId = ref<number | null>(null)
-const renameValue = ref('')
-const renameInputRef = ref<HTMLInputElement | null>(null)
-
-const deleteConfirmOpen = ref(false)
-const deleteTargetId = ref<number | null>(null)
+const {
+  fileDragOverlay,
+  fileInputRef,
+  openFilePicker,
+  onFileSelected,
+  onFileDragEnter,
+  onFileDragLeave,
+  onFileDragOver,
+  onFileDrop,
+} = useChatAttachment({ selectedId, sendPending, sendError })
 
 const selectedConv = computed(() =>
-  conversations.value.find((c) => c.id === selectedId.value)
+  conversations.value.find((c) => c.id === selectedId.value),
 )
 
-// ── Conversas ──────────────────────────────────────────────
-async function loadConversations() {
-  listLoading.value = true
-  listError.value = null
-  try {
-    conversations.value = await fetchAllPaginatedResults<ApiConversation>(
-      '/api/chat/conversations/',
-      50,
-    )
-  } catch (e) {
-    listError.value = e instanceof Error ? e.message : 'Erro ao carregar'
-    conversations.value = []
-  } finally {
-    listLoading.value = false
-  }
-}
-
-async function loadMessages(id: number) {
-  messagesLoading.value = true
-  sendError.value = null
-  messages.value = []
-  try {
-    messages.value = await fetchAllPaginatedResults<ApiChatMessage>(
-      `/api/chat/conversations/${id}/messages/`,
-      100,
-    )
-    await nextTick()
-    scrollBottom()
-  } finally {
-    messagesLoading.value = false
-  }
-}
-
 function selectConversation(id: number) {
-  if (renamingId.value !== null) cancelRename()
-  selectedId.value = id
+  pickConversation(id)
   void loadMessages(id)
   if (window.innerWidth < 700) sidebarOpen.value = false
   nextTick(() => composeRef.value?.focus())
 }
 
-async function newConversation() {
+async function handleNewConversation() {
   sendError.value = null
-  try {
-    const res = await apiFetch('/api/chat/conversations/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    })
-    if (!res.ok) throw new Error(`Erro ${res.status}`)
-    const conv = (await res.json()) as ApiConversation
-    await loadConversations()
-    selectConversation(conv.id)
-  } catch (e) {
-    listError.value = e instanceof Error ? e.message : 'Erro ao criar'
-  }
-}
-
-async function removeConversation(id: number, ev: Event) {
-  ev.stopPropagation()
-  deleteTargetId.value = id
-  deleteConfirmOpen.value = true
-}
-
-async function confirmDeleteConversation() {
-  const id = deleteTargetId.value
-  deleteConfirmOpen.value = false
-  deleteTargetId.value = null
-  if (!id) return
-  try {
-    await apiFetch(`/api/chat/conversations/${id}/`, { method: 'DELETE' })
-    if (selectedId.value === id) {
-      selectedId.value = null
-      messages.value = []
-    }
-    await loadConversations()
-  } catch {}
-}
-
-// ── Renomear ───────────────────────────────────────────────
-function startRename(conv: ApiConversation, ev: Event) {
-  ev.stopPropagation()
-  renamingId.value = conv.id
-  renameValue.value = conv.title || ''
-  nextTick(() => {
-    renameInputRef.value?.focus()
-    renameInputRef.value?.select()
+  await newConversation((id) => {
+    void loadMessages(id)
+    if (window.innerWidth < 700) sidebarOpen.value = false
+    nextTick(() => composeRef.value?.focus())
   })
 }
 
-function cancelRename() {
-  renamingId.value = null
-  renameValue.value = ''
+async function handleDeleteConversation() {
+  await confirmDeleteConversation(() => clearMessages())
 }
-
-async function confirmRename(id: number) {
-  const title = renameValue.value.trim()
-  renamingId.value = null
-  if (!title) return
-  try {
-    const res = await apiFetch(`/api/chat/conversations/${id}/`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title }),
-    })
-    if (res.ok) {
-      await loadConversations()
-    } else {
-      // Fallback local caso endpoint PATCH não exista
-      const idx = conversations.value.findIndex((c) => c.id === id)
-      const conv = idx !== -1 ? conversations.value[idx] : undefined
-      if (conv) conv.title = title
-    }
-  } catch {
-    const idx = conversations.value.findIndex((c) => c.id === id)
-    const conv = idx !== -1 ? conversations.value[idx] : undefined
-    if (conv) conv.title = title
-  }
-}
-
-function onRenameKeydown(e: KeyboardEvent, id: number) {
-  if (e.key === 'Enter') { e.preventDefault(); confirmRename(id) }
-  if (e.key === 'Escape') cancelRename()
-}
-
-// ── Envio ──────────────────────────────────────────────────
-async function send() {
-  const id = selectedId.value
-  const text = input.value.trim()
-  if (!id || (!text && !attachedFile.value) || sendPending.value) return
-
-  sendPending.value = true
-  sendError.value = null
-
-  const displayText = text || (attachedFile.value ? `[Arquivo: ${attachedFile.value.name}]` : '')
-  const userMsg: ApiChatMessage = {
-    id: Date.now(),
-    role: 'user',
-    content: displayText,
-    sources: [],
-    created_at: new Date().toISOString(),
-  }
-  messages.value = [...messages.value, userMsg]
-  input.value = ''
-  const sentFile = attachedFile.value
-  attachedFile.value = null
-  autoResize()
-  await nextTick()
-  scrollBottom()
-
-  try {
-    let res: Response
-    if (sentFile) {
-      const form = new FormData()
-      // Se o utilizador não escreveu pergunta, não enviar placeholder como `content`.
-      // O backend aceita `file` sem `content` e usa o PDF anexado como base.
-      if (text) form.append('content', text)
-      form.append('file', sentFile)
-      res = await apiFetch(`/api/chat/conversations/${id}/messages/`, {
-        method: 'POST',
-        body: form,
-      })
-    } else {
-      res = await apiFetch(`/api/chat/conversations/${id}/messages/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text }),
-      })
-    }
-
-    const data = (await res.json().catch(() => ({}))) as {
-      detail?: string
-      user_message?: ApiChatMessage
-      assistant_message?: ApiChatMessage
-    }
-    if (!res.ok) {
-      const msg =
-        typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`
-      sendError.value = msg
-      if (data.user_message) {
-        messages.value = messages.value
-          .filter((m) => m.id !== userMsg.id)
-          .concat([data.user_message])
-      } else {
-        messages.value = messages.value.filter((m) => m.id !== userMsg.id)
-      }
-      await loadConversations()
-      await nextTick()
-      scrollBottom()
-      return
-    }
-
-    if (data.user_message && data.assistant_message) {
-      messages.value = messages.value
-        .filter((m) => m.id !== userMsg.id)
-        .concat([data.user_message, data.assistant_message])
-    } else {
-      await loadMessages(id)
-    }
-    await loadConversations()
-    await nextTick()
-    scrollBottom()
-  } catch (e) {
-    sendError.value = e instanceof Error ? e.message : 'Erro ao enviar'
-    messages.value = messages.value.filter((m) => m.id !== userMsg.id)
-  } finally {
-    sendPending.value = false
-    nextTick(() => composeRef.value?.focus())
-  }
-}
-
-// ── Anexo ──────────────────────────────────────────────────
-function openFilePicker() {
-  fileInputRef.value?.click()
-}
-
-function onFileSelected(ev: Event) {
-  const el = ev.target as HTMLInputElement
-  const file = el.files?.[0] ?? null
-  el.value = ''
-  tryAttachFile(file)
-}
-
-function dataTransferHasFiles(dt: DataTransfer | null): boolean {
-  return !!dt?.types?.includes('Files')
-}
-
-function onFileDragEnter(e: DragEvent) {
-  if (selectedId.value === null || sendPending.value) return
-  if (!dataTransferHasFiles(e.dataTransfer)) return
-  e.preventDefault()
-  fileDragDepth++
-  fileDragOverlay.value = true
-}
-
-function onFileDragLeave(e: DragEvent) {
-  if (selectedId.value === null) return
-  if (!dataTransferHasFiles(e.dataTransfer)) return
-  fileDragDepth--
-  if (fileDragDepth < 0) fileDragDepth = 0
-  if (fileDragDepth === 0) fileDragOverlay.value = false
-}
-
-function onFileDragOver(e: DragEvent) {
-  if (selectedId.value === null || sendPending.value) return
-  if (!dataTransferHasFiles(e.dataTransfer)) return
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
-}
-
-function onFileDrop(e: DragEvent) {
-  fileDragDepth = 0
-  fileDragOverlay.value = false
-  if (selectedId.value === null || sendPending.value) return
-  if (!dataTransferHasFiles(e.dataTransfer)) return
-  e.preventDefault()
-  const file = e.dataTransfer?.files?.[0] ?? null
-  tryAttachFile(file)
-}
-
-function resetFileDragUi() {
-  fileDragDepth = 0
-  fileDragOverlay.value = false
-}
-
-// ── Helpers ────────────────────────────────────────────────
-function scrollBottom() {
-  messagesEnd.value?.scrollIntoView({ behavior: 'smooth' })
-}
-
-function autoResize() {
-  const el = composeRef.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 180) + 'px'
-}
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    send()
-  }
-}
-
-async function onLogout() {
-  await logout()
-  router.push('/login')
-}
-
-watch(selectedId, resetFileDragUi)
 
 onMounted(() => {
-  syncIsMobile()
-  if (typeof window !== 'undefined') {
-    isMobileMql = window.matchMedia('(max-width: 700px)')
-    isMobileMql.addEventListener('change', syncIsMobile)
-    window.addEventListener('dragend', resetFileDragUi)
-  }
   void loadConversations()
-})
-
-onBeforeUnmount(() => {
-  isMobileMql?.removeEventListener('change', syncIsMobile)
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('dragend', resetFileDragUi)
-  }
 })
 </script>
 
@@ -404,7 +107,7 @@ onBeforeUnmount(() => {
       confirmText="Apagar"
       cancelText="Cancelar"
       variant="danger"
-      @confirm="confirmDeleteConversation"
+      @confirm="handleDeleteConversation"
     />
 
     <!-- ── Sidebar ── -->
@@ -416,7 +119,7 @@ onBeforeUnmount(() => {
           </svg>
         </button>
         <span class="sidebar-brand">Studies</span>
-        <button class="icon-btn" title="Nova conversa" @click="newConversation">
+        <button class="icon-btn" title="Nova conversa" @click="handleNewConversation">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
@@ -455,7 +158,7 @@ onBeforeUnmount(() => {
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                   </svg>
                 </button>
-                <button class="conv-btn conv-btn--del" title="Apagar" @click="removeConversation(c.id, $event)">
+                <button class="conv-btn conv-btn--del" title="Apagar" @click="requestDeleteConversation(c.id, $event)">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
                   </svg>
@@ -520,7 +223,7 @@ onBeforeUnmount(() => {
           </svg>
         </button>
         <span class="topbar-title">{{ selectedConv?.title || 'Studies Assistant' }}</span>
-        <button class="icon-btn" @click="newConversation">
+        <button class="icon-btn" @click="handleNewConversation">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14"/>
           </svg>
@@ -578,7 +281,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <button class="btn-primary-cta" @click="newConversation">
+          <button class="btn-primary-cta" @click="handleNewConversation">
             Iniciar nova conversa
           </button>
         </div>

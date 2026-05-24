@@ -1,30 +1,21 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
-import { fetchAllPaginatedResults } from '@/lib/paginatedList'
-import { useAuth } from '@/composables/useAuth'
-import ThemeToggle from '@/components/ThemeToggle.vue'
+import { readApiError } from '@/lib/format'
+import {
+  fetchUserDocuments,
+  getDocumentStatus,
+  pollDocumentProcessing,
+} from '@/lib/documents'
+import { formatDate } from '@/lib/format'
+import type { ApiDocument } from '@/types/api'
+import AppSecondarySidebar from '@/components/AppSecondarySidebar.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-export interface ApiDocument {
-  id: number
-  original_name: string
-  file_url: string
-  text_char_count?: number
-  chunk_count?: number
-  embedded_chunk_count?: number
-  embedding_error?: string
-  chroma_indexed_at?: string | null
-  chroma_error?: string
-  extraction_error?: string
-  extraction_status?: 'pending' | 'processing' | 'done' | 'failed'
-  created_at: string
-  updated_at: string
-}
-
-const router = useRouter()
-const { user, logout } = useAuth()
+const sidebarLinks = [
+  { to: '/chat', label: 'Chat' },
+  { to: '/materials', label: 'Materiais' },
+]
 
 const documents = ref<ApiDocument[]>([])
 const listLoading = ref(true)
@@ -41,7 +32,7 @@ async function loadDocuments() {
   listError.value = null
   listLoading.value = true
   try {
-    documents.value = await fetchAllPaginatedResults<ApiDocument>('/api/documents/', 50)
+    documents.value = await fetchUserDocuments()
   } catch (e) {
     listError.value = e instanceof Error ? e.message : 'Erro ao carregar'
     documents.value = []
@@ -54,22 +45,6 @@ function pickFile() {
   uploadError.value = null
   uploadMessage.value = null
   fileInput.value?.click()
-}
-
-async function pollDocumentProcessing(id: number): Promise<ApiDocument | null> {
-  const intervalMs = 1500
-  for (let i = 0; i < 200; i++) {
-    const res = await apiFetch(`/api/documents/${id}/`)
-    if (!res.ok) return null
-    const doc = (await res.json()) as ApiDocument
-    if (doc.extraction_status === 'failed') {
-      if (doc.extraction_error) uploadError.value = doc.extraction_error
-      return doc
-    }
-    if (doc.extraction_status === 'done') return doc
-    await new Promise((r) => setTimeout(r, intervalMs))
-  }
-  return null
 }
 
 async function onFileChange(ev: Event) {
@@ -90,13 +65,12 @@ async function onFileChange(ev: Event) {
       method: 'POST',
       body: form,
     })
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
-      throw new Error(typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`)
-    }
+    if (!res.ok) throw new Error(await readApiError(res))
     const created = (await res.json()) as ApiDocument
     uploadMessage.value = `"${file.name}" recebido. A processar no servidor…`
-    await pollDocumentProcessing(created.id)
+    await pollDocumentProcessing(created.id, (msg) => {
+      uploadError.value = msg
+    })
     uploadMessage.value = uploadError.value
       ? `"${file.name}" — falhou a extração.`
       : `"${file.name}" — processamento concluído (ver estado abaixo).`
@@ -108,7 +82,7 @@ async function onFileChange(ev: Event) {
   }
 }
 
-async function removeDoc(doc: ApiDocument) {
+function removeDoc(doc: ApiDocument) {
   deleteTarget.value = doc
   deleteConfirmOpen.value = true
 }
@@ -132,32 +106,7 @@ async function confirmDeleteDoc() {
   }
 }
 
-function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
-  } catch { return iso }
-}
-
-function statusInfo(doc: ApiDocument) {
-  const st = doc.extraction_status
-  if (st === 'failed' || doc.extraction_error)
-    return { type: 'error', text: 'Erro na extração' }
-  if (st === 'pending' || st === 'processing')
-    return { type: 'idle', text: 'A processar no servidor…' }
-  if (doc.chroma_indexed_at) return { type: 'ok', text: 'Indexado' }
-  if (doc.chroma_error) return { type: 'warn', text: 'Erro no índice' }
-  if (doc.embedded_chunk_count) return { type: 'warn', text: 'Aguardando indexação' }
-  return { type: 'idle', text: 'Em fila…' }
-}
-
-async function onLogout() {
-  await logout()
-  router.push('/login')
-}
-
-onMounted(() => {
-  loadDocuments()
-})
+onMounted(loadDocuments)
 </script>
 
 <template>
@@ -172,49 +121,15 @@ onMounted(() => {
       @confirm="confirmDeleteDoc"
     />
 
-    <!-- Sidebar -->
-    <aside class="docs-sidebar">
-      <div class="docs-sidebar-top">
-        <button class="back-btn" @click="router.push('/chat')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          Chat
-        </button>
-        <button class="back-btn" @click="router.push('/materials')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-            <path d="M8 7h9M8 11h9M8 15h7"/>
-          </svg>
-          Materiais
-        </button>
-        <div class="docs-theme">
-          <ThemeToggle />
-        </div>
-      </div>
+    <AppSecondarySidebar :links="sidebarLinks" />
 
-      <div class="docs-sidebar-bottom">
-        <button class="sidebar-user" @click="onLogout">
-          <div class="user-avatar">{{ user?.username?.[0]?.toUpperCase() ?? '?' }}</div>
-          <span class="user-name">{{ user?.username }}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
-          </svg>
-        </button>
-      </div>
-    </aside>
-
-    <!-- Conteúdo principal -->
     <main class="docs-main">
       <div class="docs-content">
-
         <header class="docs-header">
           <h1 class="docs-title">Meus PDFs</h1>
           <p class="docs-sub">Envie seus materiais em PDF para o assistente responder com base neles. Limite: 25 MB.</p>
         </header>
 
-        <!-- Upload -->
         <div class="upload-area">
           <input
             ref="fileInput"
@@ -238,7 +153,6 @@ onMounted(() => {
           <p v-if="uploadPending" class="upload-progress-hint">
             O ficheiro foi aceite; a extração e a indexação correm em segundo plano (podes aguardar ou voltar mais tarde).
           </p>
-
           <div v-if="uploadMessage" class="feedback-ok">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="20 6 9 17 4 12"/>
@@ -248,7 +162,6 @@ onMounted(() => {
           <div v-if="uploadError" class="feedback-err">{{ uploadError }}</div>
         </div>
 
-        <!-- Lista -->
         <div class="docs-list-area">
           <div v-if="listLoading" class="list-loading">
             <div class="skel-row" /><div class="skel-row" /><div class="skel-row skel-row--sm" />
@@ -274,14 +187,13 @@ onMounted(() => {
               <div class="doc-info">
                 <span class="doc-name" :title="doc.original_name">{{ doc.original_name }}</span>
                 <div class="doc-meta">
-                  <span
-                    class="doc-status"
-                    :class="`status-${statusInfo(doc).type}`"
-                  >{{ statusInfo(doc).text }}</span>
+                  <span class="doc-status" :class="`status-${getDocumentStatus(doc).type}`">
+                    {{ getDocumentStatus(doc).text }}
+                  </span>
                   <span class="doc-sep">·</span>
                   <span>{{ doc.chunk_count ?? 0 }} chunks</span>
                   <span class="doc-sep">·</span>
-                  <span>{{ formatDate(doc.created_at) }}</span>
+                  <span>{{ formatDate(doc.created_at ?? '') }}</span>
                 </div>
               </div>
               <div class="doc-actions">
@@ -312,7 +224,6 @@ onMounted(() => {
             </li>
           </ul>
         </div>
-
       </div>
     </main>
   </div>
@@ -325,93 +236,6 @@ onMounted(() => {
   background: var(--bg);
 }
 
-/* Sidebar */
-.docs-sidebar {
-  width: 200px;
-  flex-shrink: 0;
-  background: var(--bg-2);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 0.75rem 0.5rem;
-}
-
-.docs-sidebar-top {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-2);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-
-.back-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.docs-sidebar-bottom {
-  border-top: 1px solid var(--border);
-  padding-top: 0.5rem;
-}
-
-.docs-theme {
-  padding: 0.35rem 0.45rem 0.45rem;
-}
-
-.sidebar-user {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  width: 100%;
-  transition: background 0.12s;
-}
-
-.sidebar-user:hover {
-  background: var(--bg-hover);
-}
-
-.user-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.user-name {
-  flex: 1;
-  font-size: 0.875rem;
-  color: var(--text-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Main */
 .docs-main {
   flex: 1;
   overflow-y: auto;
@@ -439,7 +263,6 @@ onMounted(() => {
   color: var(--text-2);
 }
 
-/* Upload */
 .upload-area {
   display: flex;
   align-items: center;
@@ -473,7 +296,6 @@ onMounted(() => {
   color: var(--danger);
 }
 
-/* Lista */
 .docs-list-area {
   display: flex;
   flex-direction: column;
@@ -593,12 +415,7 @@ onMounted(() => {
   background: var(--bg-hover);
 }
 
-/* Responsivo */
 @media (max-width: 600px) {
-  .docs-sidebar {
-    display: none;
-  }
-
   .docs-main {
     padding: 1.1rem 0.9rem;
   }

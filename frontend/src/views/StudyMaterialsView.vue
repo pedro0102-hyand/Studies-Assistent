@@ -1,40 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { apiFetch } from '@/lib/api'
-import { fetchAllPaginatedResults } from '@/lib/paginatedList'
-import { useAuth } from '@/composables/useAuth'
+import { apiErrorDetail } from '@/lib/format'
+import { fetchUserDocuments } from '@/lib/documents'
 import { renderMarkdownToSafeHtml } from '@/lib/markdown'
+import type { ApiDocument, GenerateResponse, MaterialKind } from '@/types/api'
 import html2pdf from 'html2pdf.js'
-import ThemeToggle from '@/components/ThemeToggle.vue'
+import AppSecondarySidebar from '@/components/AppSecondarySidebar.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
-type MaterialKind = 'summary' | 'exercise_list' | 'roadmap'
-
-interface ApiDocument {
-  id: number
-  original_name: string
-  chunk_count?: number
-  chroma_indexed_at?: string | null
-  chroma_error?: string
-  extraction_error?: string
-  extraction_status?: 'pending' | 'processing' | 'done' | 'failed'
-}
-
-interface GenerateResponse {
-  kind: MaterialKind
-  title: string
-  markdown: string
-  sources?: Array<{
-    document_id: number
-    chunk_index: number
-    original_name: string
-    excerpt: string
-  }>
-}
-
-const router = useRouter()
-const { user, logout } = useAuth()
+const sidebarLinks = [
+  { to: '/chat', label: 'Chat' },
+  { to: '/documents', label: 'Meus PDFs' },
+]
 
 const docs = ref<ApiDocument[]>([])
 const docsLoading = ref(true)
@@ -92,7 +70,7 @@ async function loadDocs() {
   docsLoading.value = true
   docsError.value = null
   try {
-    docs.value = await fetchAllPaginatedResults<ApiDocument>('/api/documents/', 50)
+    docs.value = await fetchUserDocuments()
   } catch (e) {
     docs.value = []
     docsError.value = e instanceof Error ? e.message : 'Erro ao carregar'
@@ -119,9 +97,9 @@ async function generate() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    const data = (await res.json().catch(() => ({}))) as any
-    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `Erro ${res.status}`)
-    result.value = data as GenerateResponse
+    const data = (await res.json().catch(() => ({}))) as GenerateResponse & { detail?: string }
+    if (!res.ok) throw new Error(apiErrorDetail(data, `Erro ${res.status}`))
+    result.value = data
   } catch (e) {
     generateError.value = e instanceof Error ? e.message : 'Falha ao gerar'
   } finally {
@@ -156,14 +134,7 @@ async function confirmExportPdf() {
     .save()
 }
 
-async function onLogout() {
-  await logout()
-  router.push('/login')
-}
-
-onMounted(() => {
-  loadDocs()
-})
+onMounted(loadDocs)
 </script>
 
 <template>
@@ -178,36 +149,7 @@ onMounted(() => {
       @confirm="confirmExportPdf"
     />
     <!-- Sidebar -->
-    <aside class="mat-sidebar">
-      <div class="mat-sidebar-top">
-        <button class="back-btn" @click="router.push('/chat')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          Chat
-        </button>
-        <button class="back-btn" @click="router.push('/documents')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          Meus PDFs
-        </button>
-        <div class="mat-theme">
-          <ThemeToggle />
-        </div>
-      </div>
-
-      <div class="mat-sidebar-bottom">
-        <button class="sidebar-user" @click="onLogout">
-          <div class="user-avatar">{{ user?.username?.[0]?.toUpperCase() ?? '?' }}</div>
-          <span class="user-name">{{ user?.username }}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
-          </svg>
-        </button>
-      </div>
-    </aside>
+    <AppSecondarySidebar :links="sidebarLinks" />
 
     <!-- Conteúdo -->
     <main class="mat-main">
@@ -346,56 +288,6 @@ onMounted(() => {
 
 <style scoped>
 .mat-layout { display: flex; height: 100vh; background: var(--bg); }
-
-.mat-sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  background: var(--bg-2);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 0.75rem 0.5rem;
-}
-.mat-sidebar-top { display: flex; flex-direction: column; gap: 6px; flex: 1; }
-.back-btn {
-  display: flex; align-items: center; gap: 0.55rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-2);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-.back-btn:hover { background: var(--bg-hover); color: var(--text); }
-
-.mat-sidebar-bottom { border-top: 1px solid var(--border); padding-top: 0.5rem; }
-
-.mat-theme {
-  padding: 0.35rem 0.45rem 0.45rem;
-}
-.sidebar-user {
-  display: flex; align-items: center; gap: 0.6rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  width: 100%;
-  transition: background 0.12s;
-}
-.sidebar-user:hover { background: var(--bg-hover); }
-.user-avatar {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--accent); color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.75rem; font-weight: 600; flex-shrink: 0;
-}
-.user-name {
-  flex: 1; font-size: 0.875rem; color: var(--text-2);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 
 .mat-main { flex: 1; overflow-y: auto; padding: 1.75rem 1.5rem; }
 .mat-content { max-width: 1100px; margin: 0 auto; }
@@ -555,7 +447,6 @@ onMounted(() => {
   .mat-actions { width: 100%; justify-content: flex-start; }
 }
 @media (max-width: 600px) {
-  .mat-sidebar { display: none; }
   .mat-main { padding: 1.25rem 1rem; }
 }
 </style>
