@@ -8,7 +8,7 @@ from __future__ import annotations
 from django.conf import settings
 
 from documents.pdf_text import extract_pdf_text_from_bytes
-from documents.serializers import MAX_PDF_BYTES, PDF_MAGIC
+from documents.pdf_validation import MAX_PDF_BYTES, validate_pdf_bytes, validate_pdf_upload
 
 
 class ChatAttachmentError(Exception):
@@ -23,27 +23,13 @@ def extract_text_from_uploaded_pdf(uploaded) -> str:
     if not uploaded:
         raise ChatAttachmentError('Ficheiro em falta.')
 
-    name = (getattr(uploaded, 'name', '') or '').lower()
-    if not name.endswith('.pdf'):
-        raise ChatAttachmentError('Apenas ficheiros .pdf são permitidos no chat.')
-
-    size = getattr(uploaded, 'size', 0)
-    if size > MAX_PDF_BYTES:
-        raise ChatAttachmentError(
-            f'O PDF excede o limite de {MAX_PDF_BYTES // (1024 * 1024)} MB.'
-        )
-
-    uploaded.seek(0)
-    head = uploaded.read(4)
-    uploaded.seek(0)
-    if head != PDF_MAGIC:
-        raise ChatAttachmentError('O ficheiro não é um PDF válido (cabeçalho %PDF).')
-
-    data = uploaded.read()
-    if len(data) > MAX_PDF_BYTES:
-        raise ChatAttachmentError(
-            f'O PDF excede o limite de {MAX_PDF_BYTES // (1024 * 1024)} MB.'
-        )
+    try:
+        validate_pdf_upload(uploaded)
+        uploaded.seek(0)
+        data = uploaded.read()
+        validate_pdf_bytes(data)
+    except ValueError as exc:
+        raise ChatAttachmentError(str(exc)) from exc
 
     try:
         return extract_pdf_text_from_bytes(data)

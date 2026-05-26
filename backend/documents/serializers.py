@@ -5,10 +5,8 @@ from django.utils.text import get_valid_filename
 from rest_framework import serializers
 
 from .models import Document
+from .pdf_validation import MAX_PDF_BYTES, validate_pdf_upload
 from .utils import normalize_document_ids
-
-PDF_MAGIC = b'%PDF'
-MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB
 
 
 class DocumentDetailSerializer(serializers.ModelSerializer):
@@ -51,25 +49,12 @@ class DocumentUploadSerializer(serializers.Serializer):
     file = serializers.FileField(write_only=True)
 
     def validate_file(self, value):
-        if value.size > MAX_PDF_BYTES:
-            raise serializers.ValidationError(
-                f'O ficheiro excede o limite de {MAX_PDF_BYTES // (1024 * 1024)} MB.'
-            )
-
-        name = (value.name or '').lower()
-        if not name.endswith('.pdf'):
-            raise serializers.ValidationError('Apenas ficheiros .pdf são permitidos.')
-
-        value.open('rb')
+        # Mantém a validação num só local (reutilizada pelo chat).
         try:
-            head = value.read(4)
-        finally:
-            value.seek(0)
-
-        if head != PDF_MAGIC:
-            raise serializers.ValidationError(
-                'O conteúdo não é um PDF válido (cabeçalho %PDF).'
-            )
+            value.open("rb")
+            validate_pdf_upload(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
 
         return value
 
