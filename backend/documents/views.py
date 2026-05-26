@@ -83,7 +83,13 @@ class DocumentUploadView(APIView):
 
 
 class RagAskView(APIView):
-    """POST /api/rag/ask/ — RAG com JWT; corpo: question, document_ids opcional."""
+    """
+    POST /api/rag/ask/ — RAG com JWT; corpo: question, document_ids opcional.
+
+    Nota: este endpoint é “stateless” e não é usado pelo frontend atualmente.
+    Para UX completa (histórico, anexos, mensagens), preferir o chat:
+      POST /api/chat/conversations/{id}/messages/
+    """
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScopedRateThrottle]
