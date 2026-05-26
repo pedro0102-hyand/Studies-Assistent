@@ -10,7 +10,7 @@ urlpatterns = [
     ),
     path(
         'chat/conversations/<int:pk>/',
-        views.ConversationDetailDeleteView.as_view(),
+        views.ConversationDetailView.as_view(),
         name='chat_conversation_delete',
     ),
     path(

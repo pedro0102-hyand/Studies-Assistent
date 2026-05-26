@@ -166,16 +166,3 @@ def split_into_chunks(
         start = next_start
 
     return _merge_undersized_chunks(chunks)
-
-
-def chunks_with_indices(text: str, document_id: int, **kwargs) -> list[dict]:
-    """Lista de dicts com metadados por chunk (para indexação / Chroma)."""
-    parts = split_into_chunks(text, **kwargs)
-    return [
-        {
-            'chunk_index': i,
-            'document_id': document_id,
-            'text': t,
-        }
-        for i, t in enumerate(parts)
-    ]

@@ -60,6 +60,9 @@ RAG_DIVERSIFY_RESULTS = os.environ.get('RAG_DIVERSIFY_RESULTS', 'true').strip().
     'yes',
 )
 RAG_MAX_CHUNKS_PER_DOCUMENT = max(1, min(10, int(os.environ.get('RAG_MAX_CHUNKS_PER_DOCUMENT', '2'))))
+# Para geração de materiais (/api/rag/generate/): quantos chunks candidatos buscar no Chroma.
+# Default = RAG_TOP_K * 3 (ver documents.rag). Aumentar melhora cobertura, mas pode aumentar latência.
+RAG_GENERATE_TOP_K = max(5, min(200, int(os.environ.get('RAG_GENERATE_TOP_K', str(RAG_TOP_K * 3)))))
 
 # Mensagem de sistema do RAG (opcional via .env)
 _rag_sys = os.environ.get('RAG_SYSTEM_PROMPT', '').strip()

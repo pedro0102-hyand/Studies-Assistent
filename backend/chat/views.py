@@ -58,7 +58,7 @@ class ConversationListCreateView(APIView):
         return Response(out.data, status=status.HTTP_201_CREATED)
 
 
-class ConversationDetailDeleteView(APIView):
+class ConversationDetailView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'chat'
