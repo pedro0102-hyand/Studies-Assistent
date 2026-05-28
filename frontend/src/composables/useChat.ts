@@ -11,8 +11,9 @@ export function useChatAttachment(options: {
   selectedId: Ref<number | null>
   sendPending: Ref<boolean>
   sendError: Ref<string | null>
+  attachedFile: Ref<File | null> //1.
 }) {
-  const attachedFile = ref<File | null>(null)
+
   const fileDragOverlay = ref(false)
   const fileInputRef = ref<HTMLInputElement | null>(null)
   let fileDragDepth = 0
@@ -28,7 +29,7 @@ export function useChatAttachment(options: {
       return
     }
     options.sendError.value = null
-    attachedFile.value = file
+    options.attachedFile.value = file
   }
 
   function openFilePicker() {
@@ -97,7 +98,7 @@ export function useChatAttachment(options: {
   }
 
   return {
-    attachedFile,
+    attachedFile: options.attachedFile,
     fileDragOverlay,
     fileInputRef,
     tryAttachFile,

@@ -67,7 +67,7 @@ const {
   onFileDragLeave,
   onFileDragOver,
   onFileDrop,
-} = useChatAttachment({ selectedId, sendPending, sendError })
+} = useChatAttachment({ selectedId, sendPending, sendError,attachedFile })
 
 const selectedConv = computed(() =>
   conversations.value.find((c) => c.id === selectedId.value),
