@@ -133,10 +133,12 @@ class CookieTokenBlacklistView(TokenBlacklistView):
         if refresh:
             serializer = TokenBlacklistSerializer(data={'refresh': refresh})
             try:
+                # O método is_valid já executa a lógica interna do SimpleJWT 
+                # para colocar o token refresh na lista negra.
                 serializer.is_valid(raise_exception=True)
-                serializer.save()
             except (TokenError, ValidationError):
                 pass
+                
         response = Response({'detail': 'Sessão terminada.'}, status=status.HTTP_200_OK)
         _clear_auth_cookies(response)
         return response
