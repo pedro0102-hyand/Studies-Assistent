@@ -9,6 +9,7 @@ from . import ollama_chat
 from . import ollama_embed
 from .ollama_chat import OllamaChatError
 from .ollama_embed import OllamaEmbedError
+from .query_translation import maybe_translate_query
 
 _CONTEXT_SEPARATOR = '\n\n---\n\n'
 
@@ -110,6 +111,9 @@ def generate_rag_answer(
 
     System: instruções de fidelidade ao contexto (``RAG_SYSTEM_PROMPT`` ou override).
     User: bloco com contexto recuperado + pergunta.
+
+    NOTA: a `question` aqui é sempre a pergunta ORIGINAL do utilizador (no idioma
+    original), não a versão traduzida. A tradução serve apenas para o embedding/retrieval.
     """
     q = (question or '').strip()
     if not q:
@@ -150,6 +154,9 @@ def embed_question(text: str) -> list[float]:
     """
     Gera o vetor da pergunta com as mesmas settings dos PDFs (OLLAMA_EMBED_*).
     Erros de rede/Ollama vêm como OllamaEmbedError com mensagem utilizável.
+    
+    NOTA: recebe o texto já traduzido (se aplicável). A tradução acontece
+    antes desta chamada, em `run_rag_for_user`.
     """
     try:
         return ollama_embed.embed_query(
@@ -177,16 +184,25 @@ def run_rag_for_user(
     attachment_filename: str | None = None,
 ) -> dict[str, Any]:
     """
-    Pipeline completo: embedding → Chroma (sempre com filtro user_id) →
-    contexto → resposta LLM. ``document_ids`` já deve estar validado em relação ao utilizador.
+    Pipeline completo: (tradução →) embedding → Chroma → contexto → resposta LLM.
 
-    ``attachment_context``: texto extraído de um PDF anexado à mensagem; junta-se ao contexto
-    enviado ao LLM (não entra no embedding da pergunta).
+    Fluxo de query translation:
+      1. `question` (original, ex.: "O que é fotossíntese?")
+      2. `query_for_embedding` (traduzida, ex.: "What is photosynthesis?")
+         — usada APENAS para o embedding e o similarity search no Chroma
+      3. A resposta é gerada com a `question` original, para o LLM responder
+         no idioma do utilizador.
+
+    ``document_ids`` já deve estar validado em relação ao utilizador.
+    ``attachment_context``: texto extraído de um PDF anexado à mensagem.
     """
     from .chroma_index import search_similar_chunks
 
+    # ── 1. Query translation (pergunta PT → embedding EN, se necessário) ──
+    query_for_embedding = maybe_translate_query(question)
+
     top_k = int(getattr(settings, 'RAG_TOP_K', 5))
-    embedding = embed_question(question)
+    embedding = embed_question(query_for_embedding)
 
     # Quando o utilizador não restringe `document_ids`, é comum o top_k vir todo do mesmo PDF.
     # Pedimos mais candidatos e depois diversificamos por documento.
@@ -246,6 +262,7 @@ def run_rag_for_user(
             }
         )
 
+    # ── Geração: usa a pergunta ORIGINAL (idioma do utilizador) ──
     answer = generate_rag_answer(context, question)
     return {'answer': answer, 'sources': sources}
 
@@ -332,6 +349,9 @@ def run_rag_generate_for_user(
 ) -> dict[str, Any]:
     """
     Geração de materiais: retrieval via Chroma + LLM, devolvendo Markdown e sources.
+
+    O `topic` fornecido pelo utilizador pode estar em português; é traduzido antes
+    do embedding para melhorar o retrieval em documentos em inglês.
     """
     from .chroma_index import search_similar_chunks
 
@@ -344,8 +364,11 @@ def run_rag_generate_for_user(
 
     top_k = max(int(getattr(settings, 'RAG_TOP_K', 5)), 5)
     gen_top_k = int(getattr(settings, 'RAG_GENERATE_TOP_K', top_k * 3))
-    # Se o utilizador forneceu um tema, dá-lhe peso como "query"
-    embed_text = (topic or '').strip() or question
+
+    # Traduz o topic (se em PT) para melhorar o retrieval em docs ingleses
+    raw_embed_text = (topic or '').strip() or question
+    embed_text = maybe_translate_query(raw_embed_text)
+
     embedding = embed_question(embed_text)
 
     chunks = search_similar_chunks(
