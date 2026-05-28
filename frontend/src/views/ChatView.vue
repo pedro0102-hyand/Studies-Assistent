@@ -9,6 +9,7 @@ import { useMediaQuery } from '@/composables/useMediaQuery'
 import { userInitial } from '@/lib/format'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import {renderMarkdownToSafeHtml} from '@/lib/markdown'
 
 const router = useRouter()
 const { user } = useAuth()
@@ -308,10 +309,16 @@ onMounted(() => {
                 <circle cx="12" cy="12" r="10"/>
                 <path d="M8 12l3 3 5-5" stroke="white" stroke-width="2" fill="none"/>
               </svg>
-            </div>
-            <div class="msg-content">
-              <div class="msg-bubble">{{ m.content }}</div>
-              <div v-if="m.role === 'assistant' && m.sources?.length" class="sources-wrap">
+              </div>
+              <div class="msg-content">
+    <div class="msg-bubble">
+      <!-- Se for o assistente (IA), renderiza o Markdown convertido em HTML Seguro -->
+      <div v-if="m.role === 'assistant'" v-html="renderMarkdownToSafeHtml(m.content)" />
+      
+      <!-- Se for o usuário, mantém o texto puro original por segurança -->
+      <template v-else>{{ m.content }}</template>
+    </div>
+  <div v-if="m.role === 'assistant' && m.sources?.length" class="sources-wrap">
                 <button class="sources-toggle" @click="showSources = showSources === m.id ? null : m.id">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16h16V8z"/>
@@ -441,6 +448,31 @@ export default defineComponent({ name: 'ChatView' })
 /* ── Transição do botão reabrir ── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s, transform 0.2s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; transform: scale(0.85); }
+
+/* Estilos para renderizar corretamente as tags HTML injetadas pelo Markdown */
+.msg-bubble :deep(ul), 
+.msg-bubble :deep(ol) {
+  padding-left: 1.25rem;
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.msg-bubble :deep(li) {
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+}
+
+.msg-bubble :deep(strong) {
+  font-weight: 600;
+}
+
+.msg-bubble :deep(p) {
+  margin-bottom: 0.5rem;
+}
+
+.msg-bubble :deep(p:last-child) {
+  margin-bottom: 0;
+}
 
 /* ── Layout ── */
 .chat-layout {
