@@ -1,3 +1,4 @@
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
@@ -11,6 +12,8 @@ from .throttles import AuthRegisterThrottle
 @permission_classes([AllowAny])
 def health(request):
     return Response({'status': 'ok'})
+
+@csrf_exempt
 
 
 @api_view(['POST'])
