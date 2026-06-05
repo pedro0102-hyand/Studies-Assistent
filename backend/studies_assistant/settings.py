@@ -76,6 +76,10 @@ RAG_SYSTEM_PROMPT = _rag_sys or (
 _rag_throttle_rate = os.environ.get('RAG_THROTTLE_RATE', '30/min').strip() or '30/min'
 # Chat (listar conversas / enviar mensagens)
 _chat_throttle_rate = os.environ.get('CHAT_THROTTLE_RATE', '60/min').strip() or '60/min'
+# Upload / eliminação de documentos
+_documents_throttle_rate = (
+    os.environ.get('DOCUMENTS_THROTTLE_RATE', '30/min').strip() or '30/min'
+)
 # Autenticação — força bruta / spam de contas (por IP)
 _auth_login_throttle_rate = (
     os.environ.get('AUTH_LOGIN_THROTTLE_RATE', '5/min').strip() or '5/min'
@@ -90,6 +94,11 @@ _auth_refresh_throttle_rate = (
 CHAT_MAX_CONVERSATIONS_PER_USER = max(
     0,
     int(os.environ.get('CHAT_MAX_CONVERSATIONS_PER_USER', '500')),
+)
+# Máximo de documentos na biblioteca por utilizador (0 = sem limite)
+DOCUMENT_MAX_PER_USER = max(
+    0,
+    int(os.environ.get('DOCUMENT_MAX_PER_USER', '500')),
 )
 # Texto extraído do PDF anexado no chat enviado ao LLM (caracteres)
 RAG_MAX_CHAT_ATTACHMENT_CONTEXT_CHARS = max(
@@ -330,6 +339,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'rag': _rag_throttle_rate,
         'chat': _chat_throttle_rate,
+        'documents': _documents_throttle_rate,
         'auth_login': _auth_login_throttle_rate,
         'auth_register': _auth_register_throttle_rate,
         'auth_refresh': _auth_refresh_throttle_rate,
@@ -343,6 +353,7 @@ if 'test' in sys.argv:
             **REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],
             'rag': '100000/min',
             'chat': '100000/min',
+            'documents': '100000/min',
             'auth_login': '100000/min',
             'auth_register': '100000/min',
             'auth_refresh': '100000/min',

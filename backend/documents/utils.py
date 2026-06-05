@@ -15,6 +15,15 @@ from .tasks import process_document_extraction
 INVALID_DOCUMENT_IDS_DETAIL = (
     'Um ou mais document_ids são inválidos ou não pertencem ao utilizador.'
 )
+DOCUMENT_LIMIT_REACHED_DETAIL = (
+    'Atingiste o número máximo de documentos para esta conta.'
+)
+
+
+def document_limit_reached_for_user(user: AbstractBaseUser) -> bool:
+    """True se o utilizador atingiu DOCUMENT_MAX_PER_USER."""
+    limit = int(getattr(settings, 'DOCUMENT_MAX_PER_USER', 500))
+    return limit > 0 and Document.objects.filter(user=user).count() >= limit
 
 
 def normalize_document_ids(value: list[int] | None) -> list[int] | None:

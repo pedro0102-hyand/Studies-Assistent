@@ -16,8 +16,10 @@ from core.pagination import ConversationListPagination, MessageListPagination
 from documents.models import Document
 from documents.rag import run_rag_for_user
 from documents.utils import (
+    DOCUMENT_LIMIT_REACHED_DETAIL,
     INVALID_DOCUMENT_IDS_DETAIL,
     document_ids_invalid_for_user,
+    document_limit_reached_for_user,
     enqueue_document_extraction,
     run_rag_or_error,
 )
@@ -117,6 +119,12 @@ class ConversationMessagesView(APIView):
                 return Response(
                     {'detail': 'Não foi possível extrair texto deste PDF.'},
                     status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if document_limit_reached_for_user(request.user):
+                return Response(
+                    {'detail': DOCUMENT_LIMIT_REACHED_DETAIL},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
             uploaded.seek(0)

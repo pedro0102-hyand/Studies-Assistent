@@ -18,8 +18,10 @@ from .serializers import (
     RagGenerateRequestSerializer,
 )
 from .utils import (
+    DOCUMENT_LIMIT_REACHED_DETAIL,
     INVALID_DOCUMENT_IDS_DETAIL,
     document_ids_invalid_for_user,
+    document_limit_reached_for_user,
     enqueue_document_extraction,
     run_rag_or_error,
 )
@@ -29,6 +31,13 @@ class DocumentDetailView(APIView):
     """GET um documento (polling de estado) ou DELETE."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'documents'
+
+    def get_throttles(self):
+        if self.request.method == 'DELETE':
+            return super().get_throttles()
+        return []
 
     def get(self, request, pk):
         doc = get_object_or_404(Document, pk=pk, user=request.user)
@@ -61,8 +70,15 @@ class DocumentListView(APIView):
 class DocumentUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'documents'
 
     def post(self, request):
+        if document_limit_reached_for_user(request.user):
+            return Response(
+                {'detail': DOCUMENT_LIMIT_REACHED_DETAIL},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = DocumentUploadSerializer(
             data=request.data,
             context={'request': request},
