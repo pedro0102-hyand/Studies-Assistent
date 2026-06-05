@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { useChatAttachment, useChatMessages } from '@/composables/useChat'
+import { useChatInput, useChatMessages } from '@/composables/useChat'
 import { useConversations } from '@/composables/useConversations'
 import { useLogout } from '@/composables/useLogout'
 import { useMediaQuery } from '@/composables/useMediaQuery'
@@ -16,8 +16,6 @@ const { user } = useAuth()
 const { onLogout } = useLogout()
 const isMobile = useMediaQuery('(max-width: 700px)')
 
-const composeRef = ref<HTMLTextAreaElement | null>(null)
-const attachedFile = ref<File | null>(null)
 const sidebarOpen = ref(true)
 
 const {
@@ -40,11 +38,24 @@ const {
 } = useConversations()
 
 const {
-  messages,
+  attachedFile,
   input,
-  messagesLoading,
   sendPending,
   sendError,
+  composeRef,
+  fileDragOverlay,
+  fileInputRef,
+  openFilePicker,
+  onFileSelected,
+  onFileDragEnter,
+  onFileDragLeave,
+  onFileDragOver,
+  onFileDrop,
+} = useChatInput({ selectedId })
+
+const {
+  messages,
+  messagesLoading,
   messagesEnd,
   showSources,
   loadMessages,
@@ -55,20 +66,12 @@ const {
 } = useChatMessages({
   selectedId,
   loadConversations,
-  composeRef,
   attachedFile,
+  input,
+  sendError,
+  sendPending,
+  composeRef,
 })
-
-const {
-  fileDragOverlay,
-  fileInputRef,
-  openFilePicker,
-  onFileSelected,
-  onFileDragEnter,
-  onFileDragLeave,
-  onFileDragOver,
-  onFileDrop,
-} = useChatAttachment({ selectedId, sendPending, sendError,attachedFile })
 
 const selectedConv = computed(() =>
   conversations.value.find((c) => c.id === selectedId.value),
