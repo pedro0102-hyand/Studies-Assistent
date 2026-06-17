@@ -50,7 +50,7 @@ Utilizador → Pergunta → Embedding da pergunta → Similarity search → LLM 
 
 ## Funcionalidades
 
-- **Upload e gestão de PDFs** — carrega, lista e apaga documentos; estado de processamento em tempo real (polling).
+- **Upload e gestão de PDFs** — carrega, lista e apaga documentos; estado de processamento em tempo real (polling); limites de taxa e de quantidade por conta.
 - **RAG com isolamento por utilizador** — cada consulta ao ChromaDB é filtrada pelo `user_id`; impossível cruzar dados entre utilizadores.
 - **Chat com histórico** — conversas persistidas no banco de dados; renomear, apagar e paginar conversas.
 - **Anexo de PDF no chat** — envia um PDF diretamente numa mensagem; o texto é extraído e incluído no contexto do LLM.
@@ -58,7 +58,8 @@ Utilizador → Pergunta → Embedding da pergunta → Similarity search → LLM 
 - **Exportação para PDF** — baixa qualquer material gerado como ficheiro PDF formatado.
 - **Autenticação segura** — JWT armazenado em cookies HttpOnly (sem tokens expostos ao JavaScript); refresh automático.
 - **Tema claro/escuro** — alternância persistida em `localStorage`.
-- **Rate limiting** — throttling por IP nos endpoints de autenticação e por utilizador nos endpoints RAG/chat.
+- **Rate limiting** — throttling por IP nos endpoints de autenticação e por utilizador nos endpoints de documentos (upload/apagar), RAG e chat.
+- **Limites por utilizador** — número máximo de conversas e de documentos na biblioteca (configurável; 0 = ilimitado).
 
 ---
 
@@ -174,6 +175,15 @@ RAG_TOP_K=5
 RAG_CHUNK_SIZE=1500
 RAG_CHUNK_OVERLAP=200
 RAG_MAX_CONTEXT_CHARS=12000
+
+# ── Limites por utilizador (opcional) ────────────────────────
+# CHAT_MAX_CONVERSATIONS_PER_USER=500
+# DOCUMENT_MAX_PER_USER=500
+
+# ── Rate limiting (opcional) ─────────────────────────────────
+# DOCUMENTS_THROTTLE_RATE=30/min
+# RAG_THROTTLE_RATE=30/min
+# CHAT_THROTTLE_RATE=60/min
 ```
 
 > **Gerar uma chave secreta:**
@@ -295,13 +305,14 @@ studies-assistant/
 │   │   ├── jwt_cookie_views.py   # Login, refresh, logout com cookies
 │   │   ├── serializers.py        # Registo e perfil de utilizador
 │   │   ├── pagination.py         # Paginação reutilizável
-│   │   ├── throttles.py          # Rate limiting por IP
+│   │   ├── throttles.py          # Rate limiting por IP (auth)
 │   │   └── exception_handler.py  # Respostas de erro traduzidas
 │   │
 │   ├── documents/                # App de documentos e RAG
 │   │   ├── models.py             # Modelo Document com estado de extração
 │   │   ├── serializers.py        # Upload, detalhe, RAG ask/generate
-│   │   ├── views.py              # Upload, listagem, RAG endpoints
+│   │   ├── views.py              # Upload, listagem, RAG (com ScopedRateThrottle)
+│   │   ├── utils.py              # Limites por utilizador, fila Celery, helpers RAG
 │   │   ├── tasks.py              # Tarefa Celery de extração/indexação
 │   │   ├── extraction.py         # Orquestração: texto → chunks → vetores → Chroma
 │   │   ├── pdf_text.py           # Extração de texto com pypdf
@@ -327,19 +338,24 @@ studies-assistant/
     │   ├── App.vue
     │   ├── router/               # Vue Router com guards de autenticação
     │   ├── composables/
-    │   │   ├── useAuth.ts        # Estado de sessão global
-    │   │   └── useTheme.ts       # Tema claro/escuro
+    │   │   ├── useAuth.ts          # Estado de sessão global
+    │   │   ├── useChat.ts          # useChatInput (composição/anexos) + useChatMessages
+    │   │   ├── useConversations.ts # CRUD de conversas na sidebar
+    │   │   ├── useTheme.ts         # Tema claro/escuro
+    │   │   └── useLogout.ts        # Terminar sessão e redirecionar
     │   ├── lib/
-    │   │   ├── api.ts            # fetch com refresh automático de JWT
-    │   │   ├── markdown.ts       # Renderização Markdown segura
-    │   │   └── paginatedList.ts  # Utilitário para percorrer paginação
+    │   │   ├── api.ts              # fetch com refresh automático de JWT
+    │   │   ├── format.ts           # formatDate, userInitial, erros da API
+    │   │   ├── markdown.ts         # Renderização Markdown segura
+    │   │   └── paginatedList.ts    # Utilitário para percorrer paginação
     │   ├── components/
+    │   │   ├── AppUserMenu.vue
     │   │   ├── ConfirmDialog.vue
     │   │   └── ThemeToggle.vue
     │   ├── views/
     │   │   ├── LoginView.vue
     │   │   ├── RegisterView.vue
-    │   │   ├── ChatView.vue        # Interface principal de chat
+    │   │   ├── ChatView.vue        # Interface principal de chat (useChatInput + useChatMessages)
     │   │   ├── DocumentsView.vue   # Gestão de PDFs
     │   │   └── StudyMaterialsView.vue  # Geração de materiais
     │   └── assets/
@@ -369,10 +385,10 @@ Todos os endpoints são prefixados com `/api/`. A autenticação usa cookies Htt
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| `POST` | `/api/documents/upload/` | Upload de PDF (multipart/form-data, campo `file`) |
+| `POST` | `/api/documents/upload/` | Upload de PDF (multipart/form-data, campo `file`; rate limit + limite por conta) |
 | `GET`  | `/api/documents/` | Listar documentos do utilizador (paginado) |
 | `GET`  | `/api/documents/{id}/` | Detalhe e estado de processamento de um documento |
-| `DELETE` | `/api/documents/{id}/` | Apagar documento (ficheiro + vetores Chroma) |
+| `DELETE` | `/api/documents/{id}/` | Apagar documento (ficheiro + vetores Chroma; rate limit) |
 
 **Estados de extração** (`extraction_status`): `pending` → `processing` → `done` / `failed`
 
@@ -394,7 +410,7 @@ Todos os endpoints são prefixados com `/api/`. A autenticação usa cookies Htt
 | `DELETE` | `/api/chat/conversations/{id}/` | Apagar conversa |
 | `PATCH` | `/api/chat/conversations/{id}/` | Renomear conversa (`title`) |
 | `GET`  | `/api/chat/conversations/{id}/messages/` | Listar mensagens (paginado) |
-| `POST` | `/api/chat/conversations/{id}/messages/` | Enviar mensagem (`content`, `file?`, `document_ids?`) |
+| `POST` | `/api/chat/conversations/{id}/messages/` | Enviar mensagem (`content`, `file?`, `document_ids?`; PDF anexo conta para o limite de documentos) |
 
 ---
 
@@ -458,10 +474,13 @@ Quando o utilizador envia uma pergunta:
 | `CELERY_BROKER_URL` | `redis://127.0.0.1:6379/0` | URL do Redis para Celery |
 | `CELERY_TASK_ALWAYS_EAGER` | `false` | Forçar modo síncrono no Celery |
 | `CHAT_MAX_CONVERSATIONS_PER_USER` | `500` | Limite de conversas por utilizador (0 = ilimitado) |
+| `DOCUMENT_MAX_PER_USER` | `500` | Limite de documentos na biblioteca por utilizador (0 = ilimitado) |
 | `RAG_THROTTLE_RATE` | `30/min` | Rate limit para endpoints RAG |
 | `CHAT_THROTTLE_RATE` | `60/min` | Rate limit para endpoints de chat |
+| `DOCUMENTS_THROTTLE_RATE` | `30/min` | Rate limit para upload e DELETE de documentos |
 | `AUTH_LOGIN_THROTTLE_RATE` | `5/min` | Rate limit para login (por IP) |
 | `AUTH_REGISTER_THROTTLE_RATE` | `3/min` | Rate limit para registo (por IP) |
+| `AUTH_REFRESH_THROTTLE_RATE` | `60/min` | Rate limit para refresh de token (por IP) |
 | `JWT_COOKIE_SAMESITE` | *(auto)* | `Lax` em dev, `None` em produção HTTPS |
 | `JWT_COOKIE_SECURE` | *(auto)* | `false` em DEBUG, `true` em produção |
 | `DJANGO_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens CORS permitidas |
