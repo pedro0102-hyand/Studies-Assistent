@@ -4,12 +4,9 @@ A persistência na biblioteca (modelo ``Document``) é feita na view de mensagen
 """
 
 from __future__ import annotations
-
 from django.conf import settings
-
 from documents.pdf_text import extract_pdf_text_from_bytes
 from documents.pdf_validation import MAX_PDF_BYTES, validate_pdf_bytes, validate_pdf_upload
-
 
 class ChatAttachmentError(Exception):
     """Ficheiro inválido ou extração falhou."""
@@ -21,7 +18,7 @@ def extract_text_from_uploaded_pdf(uploaded) -> str:
     Devolve texto extraído ou levanta ChatAttachmentError.
     """
     if not uploaded:
-        raise ChatAttachmentError('Ficheiro em falta.')
+        raise ChatAttachmentError('Sem documento.')
 
     try:
         validate_pdf_upload(uploaded)

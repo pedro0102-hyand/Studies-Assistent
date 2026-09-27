@@ -1,10 +1,7 @@
 from django.conf import settings
 from rest_framework import serializers
-
 from documents.serializers import DocumentIdsField
-
 from .models import Conversation, Message
-
 
 class ConversationSerializer(serializers.ModelSerializer):
     message_count = serializers.SerializerMethodField()

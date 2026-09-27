@@ -1,7 +1,5 @@
 """Rate limits por IP nas rotas de autenticação (força bruta / abuso)."""
-
 from rest_framework.throttling import SimpleRateThrottle
-
 
 class _AuthIPThrottle(SimpleRateThrottle):
     """Sempre por IP, mesmo com sessão JWT (evita contornar limites)."""
@@ -12,14 +10,11 @@ class _AuthIPThrottle(SimpleRateThrottle):
             'ident': self.get_ident(request),
         }
 
-
 class AuthLoginThrottle(_AuthIPThrottle):
     scope = 'auth_login'
 
-
 class AuthRegisterThrottle(_AuthIPThrottle):
     scope = 'auth_register'
-
 
 class AuthRefreshThrottle(_AuthIPThrottle):
     scope = 'auth_refresh'

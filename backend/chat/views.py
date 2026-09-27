@@ -1,5 +1,4 @@
 import os
-
 from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -11,7 +10,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-
 from core.pagination import ConversationListPagination, MessageListPagination
 from documents.models import Document
 from documents.rag import run_rag_for_user

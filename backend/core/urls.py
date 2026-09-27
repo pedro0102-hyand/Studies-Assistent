@@ -1,5 +1,4 @@
 from django.urls import path
-
 from . import views
 from .jwt_cookie_views import (
     CookieTokenBlacklistView,

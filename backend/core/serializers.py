@@ -16,7 +16,7 @@ class RegisterSerializer(serializers.Serializer):
     def validate_username(self, value):
 
         if User.objects.filter(username__iexact=value).exists():
-            raise serializers.ValidationError('Este nome de utilizador já está em uso.')
+            raise serializers.ValidationError('Este nome de usuário já está em uso.')
         return value
 
     def validate_email(self, value):
@@ -30,7 +30,7 @@ class RegisterSerializer(serializers.Serializer):
 
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError(
-                {'password_confirm': 'As palavras-passe não coincidem.'}
+                {'password_confirm': 'As senhas não coincidem.'}
             )
         try:
             validate_password(attrs['password'])
