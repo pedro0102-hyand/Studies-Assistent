@@ -1,7 +1,7 @@
 from __future__ import annotations
 from django.conf import settings
 from django.utils import timezone
-from chroma_index import upsert_document_to_chroma
+from .chroma_index import upsert_document_to_chroma
 from .chunking import split_into_chunks
 from .models import Document
 from .ollama_embed import OllamaEmbedError, embed_texts
