@@ -2,12 +2,9 @@ from django.conf import settings
 from django.db import models
 from django.utils.text import get_valid_filename
 
-
 def upload_to_user_pdf(instance: 'Document', filename: str) -> str:
     safe = get_valid_filename(filename)
     return f'pdfs/user_{instance.user_id}/{safe}'
-
-
 class Document(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

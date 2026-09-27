@@ -1,15 +1,4 @@
-"""
-Divisão do texto em chunks com overlap.
-
-- Normalização de espaços em branco típicos de PDFs.
-- Fim de chunk preferencial em separadores naturais (parágrafo, linha, frase, espaço).
-- Após cada chunk, o próximo começa em `end - overlap`, alinhado **para trás** ao início
-  da palavra se o índice cair a meio — preserva continuidade (não se salta texto para a frente).
-- Fragmentos muito curtos (< 400 chars) são fundidos ao chunk anterior quando este já
-  é grande (~650+ chars), para evitar blocos desligados (ex.: só cabeçalho de página).
-"""
 from __future__ import annotations
-
 import re
 
 # Separadores do mais forte ao mais fraco (ordem de preferência para «snap» do fim do chunk)

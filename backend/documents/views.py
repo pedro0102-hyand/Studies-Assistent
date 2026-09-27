@@ -5,9 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-
 from core.pagination import DocumentListPagination
-
 from .chroma_index import delete_chroma_for_document
 from .models import Document
 from .rag import run_rag_for_user, run_rag_generate_for_user

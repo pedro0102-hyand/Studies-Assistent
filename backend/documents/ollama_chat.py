@@ -1,15 +1,8 @@
-
 from __future__ import annotations
-
 from typing import Any
-
 import httpx
-
-
 class OllamaChatError(Exception):
-    """Falha na geração (rede, HTTP ou resposta inválida)."""
-
-
+    """Erro de chat com o Ollama (falha de rede, resposta inesperada, etc.)."""
 def _parse_chat_response(data: dict[str, Any]) -> str:
 
     msg = data.get('message')

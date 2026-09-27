@@ -1,13 +1,8 @@
-"""Extração de texto de PDFs (pypdf) — import lazy para o Django arrancar sem o pacote instalado."""
-
 from __future__ import annotations
-
 import logging
 from io import BytesIO
 from pathlib import Path
-
 logger = logging.getLogger(__name__)
-
 
 def _extract_text_from_reader(reader, *, page_log_suffix: str = '') -> str:
     parts: list[str] = []

@@ -1,22 +1,5 @@
-"""
-Query translation para RAG multilíngue.
-
-Problema: documentos em inglês + pergunta em português → embeddings em "espaços"
-semânticos diferentes → similaridade baixa → RAG não encontra nada.
-
-Solução: antes de embedar a pergunta, detectar o idioma e, se não for inglês,
-gerar uma versão em inglês via LLM. O embedding é feito sobre a versão inglesa,
-mas a resposta final continua sendo gerada na língua original da pergunta.
-
-Estratégia: "query expansion multilíngue"
-  - Chamada leve ao LLM (max_tokens pequeno, sem contexto de documentos)
-  - Se falhar por qualquer motivo, usa a pergunta original (sem quebrar o fluxo)
-  - Configurável via settings: RAG_QUERY_TRANSLATION_ENABLED (default: True)
-"""
 from __future__ import annotations
-
 import logging
-
 from django.conf import settings
 
 logger = logging.getLogger(__name__)

@@ -1,25 +1,16 @@
-"""Persistência de embeddings no ChromaDB (vetores + texto + metadados).
-
-O cliente Chroma é mantido por processo (lazy + thread-safe). Cada worker do
-Gunicorn é um processo separado com a sua própria instância; não há estado
-partilhado entre workers — o armazenamento em disco é a fonte de verdade.
-"""
 from __future__ import annotations
-
 import logging
 import threading
 from typing import TYPE_CHECKING, Any, NamedTuple
-
 from django.conf import settings
+import chromadb
 
 if TYPE_CHECKING:
     from .models import Document
 
 logger = logging.getLogger(__name__)
-
 _chroma_lock = threading.Lock()
 _chroma: '_ChromaBundle | None' = None
-
 
 class _ChromaBundle(NamedTuple):
     client: Any
@@ -30,8 +21,6 @@ def _get_collection():
     global _chroma
     if _chroma is not None:
         return _chroma.collection
-
-    import chromadb
 
     path = getattr(settings, 'CHROMA_PERSIST_PATH', None)
     name = getattr(settings, 'CHROMA_COLLECTION_NAME', 'study_documents')

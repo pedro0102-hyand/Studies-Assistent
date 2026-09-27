@@ -1,10 +1,7 @@
 from __future__ import annotations
-
 import math
 from typing import Any
-
 import httpx
-
 
 class OllamaEmbedError(Exception):
     """Falha ao obter embeddings (rede, HTTP ou resposta inválida)."""

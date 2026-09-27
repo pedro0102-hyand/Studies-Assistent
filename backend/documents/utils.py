@@ -1,30 +1,19 @@
-"""Utilitários partilhados entre views e serializers de documentos."""
-
 from __future__ import annotations
-
 import threading
-
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser
-
 from .models import Document
 from .ollama_chat import OllamaChatError
 from .ollama_embed import OllamaEmbedError
 from .tasks import process_document_extraction
 
-INVALID_DOCUMENT_IDS_DETAIL = (
-    'Um ou mais document_ids são inválidos ou não pertencem ao utilizador.'
-)
-DOCUMENT_LIMIT_REACHED_DETAIL = (
-    'Atingiste o número máximo de documentos para esta conta.'
-)
-
+INVALID_DOCUMENT_IDS_DETAIL = ('Um ou mais document_ids são inválidos ou não pertencem ao utilizador.')
+DOCUMENT_LIMIT_REACHED_DETAIL = ('Atingiste o número máximo de documentos para esta conta.')
 
 def document_limit_reached_for_user(user: AbstractBaseUser) -> bool:
     """True se o utilizador atingiu DOCUMENT_MAX_PER_USER."""
     limit = int(getattr(settings, 'DOCUMENT_MAX_PER_USER', 500))
     return limit > 0 and Document.objects.filter(user=user).count() >= limit
-
 
 def normalize_document_ids(value: list[int] | None) -> list[int] | None:
     """Remove duplicados mantendo a ordem; None se vazio ou ausente."""
@@ -37,7 +26,6 @@ def normalize_document_ids(value: list[int] | None) -> list[int] | None:
             seen.add(doc_id)
             out.append(doc_id)
     return out
-
 
 def document_ids_invalid_for_user(
     user: AbstractBaseUser,
@@ -52,7 +40,6 @@ def document_ids_invalid_for_user(
         )
     )
     return set(document_ids) != found
-
 
 def enqueue_document_extraction(document_id: int) -> str | None:
     """

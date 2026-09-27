@@ -1,10 +1,6 @@
-"""RAG: embedding da pergunta, retrieval no ChromaDB e geração via LLM."""
 from __future__ import annotations
-
 from typing import Any
-
 from django.conf import settings
-
 from . import ollama_chat
 from . import ollama_embed
 from .ollama_chat import OllamaChatError
@@ -12,7 +8,6 @@ from .ollama_embed import OllamaEmbedError
 from .query_translation import maybe_translate_query
 
 _CONTEXT_SEPARATOR = '\n\n---\n\n'
-
 
 def build_context_from_chunks(
     chunks: list[dict[str, Any]],
@@ -212,12 +207,7 @@ def run_rag_for_user(
     )
     request_k = min(50, max(1, top_k * (5 if diversified else 1)))
 
-    chunks = search_similar_chunks(
-        embedding,
-        user_id=user_id,
-        top_k=request_k,
-        document_ids=document_ids,
-    )
+    chunks = search_similar_chunks(embedding,user_id=user_id,top_k=request_k,document_ids=document_ids)
 
     if diversified and chunks:
         per_doc = int(getattr(settings, 'RAG_MAX_CHUNKS_PER_DOCUMENT', 2))
@@ -368,15 +358,8 @@ def run_rag_generate_for_user(
     # Traduz o topic (se em PT) para melhorar o retrieval em docs ingleses
     raw_embed_text = (topic or '').strip() or question
     embed_text = maybe_translate_query(raw_embed_text)
-
     embedding = embed_question(embed_text)
-
-    chunks = search_similar_chunks(
-        embedding,
-        user_id=user_id,
-        top_k=gen_top_k,
-        document_ids=document_ids,
-    )
+    chunks = search_similar_chunks(embedding,user_id=user_id,top_k=gen_top_k,document_ids=document_ids)
     context, sources = build_context_from_chunks(
         chunks,
         max_chars=int(getattr(settings, 'RAG_MAX_CONTEXT_CHARS', 12000)) * 2,

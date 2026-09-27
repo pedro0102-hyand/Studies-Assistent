@@ -1,14 +1,10 @@
 import os
-
 from django.conf import settings
 from django.utils.text import get_valid_filename
 from rest_framework import serializers
-
 from .models import Document
 from .pdf_validation import MAX_PDF_BYTES, validate_pdf_upload
 from .utils import normalize_document_ids
-
-
 class DocumentDetailSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     text_char_count = serializers.SerializerMethodField()
@@ -109,22 +105,7 @@ class RagGenerateRequestSerializer(serializers.Serializer):
             ('roadmap', 'Roadmap'),
         ]
     )
-    title = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        trim_whitespace=True,
-        max_length=160,
-    )
-    topic = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        trim_whitespace=True,
-        max_length=getattr(settings, 'RAG_MAX_QUESTION_LENGTH', 4000),
-    )
-    instructions = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        trim_whitespace=True,
-        max_length=4000,
-    )
+    title = serializers.CharField(required=False,allow_blank=True,trim_whitespace=True,max_length=160)
+    topic = serializers.CharField(required=False,allow_blank=True,trim_whitespace=True,max_length=getattr(settings, 'RAG_MAX_QUESTION_LENGTH', 4000))
+    instructions = serializers.CharField(required=False,allow_blank=True,trim_whitespace=True,max_length=4000) d
     document_ids = DocumentIdsField()

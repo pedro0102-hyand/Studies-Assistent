@@ -1,13 +1,3 @@
-"""Validação partilhada para PDFs (upload e anexos no chat).
-
-Centraliza regras para evitar divergências:
-- limite de tamanho (25 MB)
-- extensão .pdf
-- cabeçalho %PDF
-
-Este módulo é deliberadamente agnóstico a DRF/Django (levanta ValueError).
-"""
-
 from __future__ import annotations
 
 PDF_MAGIC = b"%PDF"
